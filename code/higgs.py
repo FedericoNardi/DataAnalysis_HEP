@@ -1,5 +1,6 @@
 
-import scipy as np
+import numpy as np
+import matplotlib.pyplot as plt
 import ROOT
 from ROOT import TBox, TArrow, TCanvas, TH1D, TH2D, TLine, TMath, TRandom3, TROOT, TLatex, TFile, TLegend, TLegendEntry, gROOT, gDirectory, kTRUE
 
@@ -123,7 +124,7 @@ def IntegratePoissonFromRight(mu, Nobs):
 
 # --------------------------------------------------------------------------
 
-def SignificanceOpt(Lumi_scalefactor = 1.00):
+def SignificanceOpt(Lumi_scalefactor = 1.00, plot = "n"):
 	print("------- Significance Optimization -------/n")
 	
 	# Prepare histograms
@@ -187,35 +188,126 @@ def SignificanceOpt(Lumi_scalefactor = 1.00):
 		print("	Mass window: ", OptMassWindow_exp, "\n")
 
 	# plot and save histograms
-	canvas1 = TCanvas( "canvas1","Standard Canvas",600,400);  
-  	canvas1.SetLeftMargin(0.125);
-  	canvas1.SetBottomMargin(0.125); 
-  	canvas1.cd(); 
- 	
-	h_masswindow_exp.SetLineColor(1);
-	h_masswindow_exp.SetLineWidth(2);
-	h_masswindow_obs.SetLineColor(4);
-	h_masswindow_obs.SetLineWidth(2);
+	if(plot == "y"):
+		canvas1 = TCanvas( "canvas1","Standard Canvas",600,400);  
+		canvas1.SetLeftMargin(0.125);
+		canvas1.SetBottomMargin(0.125); 
+		canvas1.cd(); 
+	
+		h_masswindow_exp.SetLineColor(1);
+		h_masswindow_exp.SetLineWidth(2);
+		h_masswindow_obs.SetLineColor(4);
+		h_masswindow_obs.SetLineWidth(2);
 
-	h_masswindow_exp.SetAxisRange(-1.,6.,"Y");
-	h_masswindow_exp.Draw("l");
-	if( abs(Lumi_scalefactor-1.00)<0.01 ):
-		h_masswindow_obs.Draw("l same");
+		h_masswindow_exp.SetAxisRange(-1.,6.,"Y");
+		h_masswindow_exp.Draw("l");
+		if( abs(Lumi_scalefactor-1.00)<0.01 ):
+			h_masswindow_obs.Draw("l same");
 
-	# axes
-	AddText( 0.900, 0.035, "Mass window GeV",0.060, 0.,"right"); # X-axis
-	AddText( 0.040, 0.900, "Significance" ,0.060,90.,"right");   # Y-axis    
-	AddText( 0.225, 0.825, "Luminosity scalefactor = "+str(Lumi_scalefactor),0.050, 0.,"left");            
+		# axes
+		AddText( 0.900, 0.035, "Mass window GeV",0.060, 0.,"right"); # X-axis
+		AddText( 0.040, 0.900, "Significance" ,0.060,90.,"right");   # Y-axis    
+		AddText( 0.225, 0.825, "Luminosity scalefactor = "+str(Lumi_scalefactor),0.050, 0.,"left");            
 
-	AddText( 0.700, 0.200, "Expected significance",0.050, 0.,"right",1,1);                        
-	if( abs(Lumi_scalefactor-1.00)<0.01 ):
-		AddText( 0.700, 0.300, "Observed significance",0.050, 0.,"right",1,4);                        
+		AddText( 0.700, 0.200, "Expected significance",0.050, 0.,"right",1,1);                        
+		if( abs(Lumi_scalefactor-1.00)<0.01 ):
+			AddText( 0.700, 0.300, "Observed significance",0.050, 0.,"right",1,4);                        
 
-	canvas1.Print("Plots/Significance_Optimization_lumiscalefactor"+str(Lumi_scalefactor)+".pdf");
+		canvas1.Print("Plots/Significance_Optimization_lumiscalefactor"+str(Lumi_scalefactor)+".pdf");
 
 	return OptimumSign_exp;
 
 # ---------------------------------------------------------------------------
+
+def SideBandFit(irebin=1):
+
+	print("\n Side-band fit \n\n")
+
+	# prepare histograms
+	h_bgr = GetMassDistribution(1)
+	h_data = GetMassDistribution(2)
+
+	# rebin
+	h_bgr.Rebin(irebin)
+	h_data.Rebin(irebin)
+	print("INFO: Rebinning histograms with factor",irebin,". Binwidth: ",h_data.GetBinWidth(1))
+
+	# Loop over scalefactor (alpha_bgr)
+	h_sf_bgr = TH1D("h_sf_bgr","",100,0.5,2.5)
+	sf_bgr = 1.
+
+	for i in range(1,h_sf_bgr.GetNbinsX()+1): 
+		sf_bgr = h_sf_bgr.GetBinCenter(i)
+
+		# Loop over bins, compute loglikelihood, save in histogram
+		loglik = 0.
+		for j in range(1,h_data.GetNbinsX()+1):
+
+			# Signal-free region
+			m4lepBin = h_data.GetBinCenter(j)
+			NObsBin = h_data.GetBinContent(j)
+
+			if ( m4lepBin>=150. and m4lepBin<=400.): # CHECK: walktrough ha stesso segno
+				MeanBgdBin = sf_bgr * h_bgr.GetBinContent(j)
+
+				if MeanBgdBin>0.: loglik += TMath.Log( TMath.Poisson(NObsBin,MeanBgdBin) )
+
+		h_sf_bgr.SetBinContent(i,-2.*loglik)
+
+
+	# Interpret the likelihood distribution
+
+	h_sf_bgr_rescaled = h_sf_bgr.Clone("h_sf_bgr_rescaled")
+
+
+	# find minimum
+	
+	MinBin = h_sf_bgr.GetMinimumBin()
+	Minimum = h_sf_bgr.GetBinContent(MinBin)
+	BestSF_bgd = h_sf_bgr.GetBinCenter(MinBin)
+
+	print(BestSF_bgd)
+
+	# Rescale and find \pm 1\sigma errors
+	LeftLim = -1.
+	RightLim = Minimum
+
+	for i in range(1,h_sf_bgr.GetNbinsX()+1):
+		h_sf_bgr_rescaled.SetBinContent(i,h_sf_bgr.GetBinContent(i)-Minimum)
+
+		if( LeftLim < Minimum and h_sf_bgr_rescaled.GetBinContent(i)<1. ): 
+			LeftLim = h_sf_bgr.GetBinCenter(i)
+		if (LeftLim>0. and RightLim>0. and h_sf_bgr_rescaled.GetBinContent(i)<1.): 
+			RightLim = h_sf_bgr.GetBinCenter(i)
+
+
+	# Print summary
+	LeftError = BestSF_bgd - LeftLim
+	RightError = RightLim - BestSF_bgd
+
+	print("   ----------\n","   Result fit: \n","   ----------","Background scale factor from sideband fit: ",BestSF_bgd," - ",LeftError," + ",RightError)
+
+	# Plot histogram
+	canvas1 = TCanvas("canvas1","Standard Canvas",600,400)
+	canvas1.SetLeftMargin(0.175)
+	canvas1.SetBottomMargin(0.125)
+	canvas1.cd()
+	h_sf_bgr_rescaled.Draw("C")
+	canvas1.Print("Plots/SideBandFit.pdf")
+
+
+	# Find expected background
+	bgr = h_bgr.Integral(h_bgr.FindBin(120),h_bgr.FindBin(130))
+	print("BACKGROUND - without rescaling	: ", bgr)
+	print("BACKGROUND - with rescaling	: ", 1.11*bgr," - ",LeftError*bgr,' + ',RightError*bgr)
+
+	return
+
+# ---------------------------------------------------------
+
+def ExpectedSignificance_ToyMC(mean_bgd, Delta_bgd, mean_sig, n_MC):
+	
+
 
 # =========================================================================
 		
@@ -223,11 +315,18 @@ def SignificanceOpt(Lumi_scalefactor = 1.00):
 
 # MassPlot(20)
 
-i=1.0
-sign = []
-while i<5.5:
-	sign = SignificanceOpt(i)
-	i += 0.1
+# lumi = np.linspace(1,6,20)
+# sign = np.zeros(lumi.size)
+# for i in range(lumi.size):
+# 	sign[i] = SignificanceOpt(lumi[i])
+# 	# if  sign[i]>=5.0 : break 
+
+# plt.plot(lumi, sign,'.')
+# plt.plot([1,6],[5.0,5.0],linewidth=1)
+# plt.grid(linestyle='--',linewidth=1)
+# plt.show()
+
+SideBandFit()
 
 
 
