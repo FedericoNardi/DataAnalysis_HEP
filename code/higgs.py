@@ -86,7 +86,7 @@ def MassPlot(Irebin):
 	for i in range(0,h_bgr.GetNbinsX()):
 		h_SB.SetBinContent(i, h_sig.GetBinContent(i)+h_bgr.GetBinContent(i) )
 
-		print(" REBINNED HISTOGRAM: bin", i, "Ndata = ",h_data.GetBinContent(i),"/n")
+		print(" REBINNED HISTOGRAM: bin", i, "Ndata = ",h_data.GetBinContent(i),"\n")
 
 	# prepare and plot histograms
 	Data_max = h_data.GetBinContent(h_data.GetMaximumBin())
@@ -266,20 +266,18 @@ def SideBandFit(irebin=1):
 	Minimum = h_sf_bgr.GetBinContent(MinBin)
 	BestSF_bgd = h_sf_bgr.GetBinCenter(MinBin)
 
-	print(BestSF_bgd)
-
 	# Rescale and find \pm 1\sigma errors
 	LeftLim = -1.
-	RightLim = Minimum
+	RightLim = BestSF_bgd
 
 	for i in range(1,h_sf_bgr.GetNbinsX()+1):
 		h_sf_bgr_rescaled.SetBinContent(i,h_sf_bgr.GetBinContent(i)-Minimum)
 
-		if( LeftLim < Minimum and h_sf_bgr_rescaled.GetBinContent(i)<1. ): 
+		if( h_sf_bgr_rescaled.GetBinCenter(i)<BestSF_bgd and h_sf_bgr_rescaled.GetBinContent(i)>=1 ):
 			LeftLim = h_sf_bgr.GetBinCenter(i)
-		if (LeftLim>0. and RightLim>0. and h_sf_bgr_rescaled.GetBinContent(i)<1.): 
+			
+		if( h_sf_bgr_rescaled.GetBinCenter(i)>BestSF_bgd and h_sf_bgr_rescaled.GetBinContent(i)<=1 ):
 			RightLim = h_sf_bgr.GetBinCenter(i)
-
 
 	# Print summary
 	LeftError = BestSF_bgd - LeftLim
@@ -299,34 +297,82 @@ def SideBandFit(irebin=1):
 	# Find expected background
 	bgr = h_bgr.Integral(h_bgr.FindBin(120),h_bgr.FindBin(130))
 	print("BACKGROUND - without rescaling	: ", bgr)
-	print("BACKGROUND - with rescaling	: ", 1.11*bgr," - ",LeftError*bgr,' + ',RightError*bgr)
+	print("BACKGROUND - with rescaling	: ", BestSF_bgd*bgr," - ",LeftError*bgr,' + ',RightError*bgr)
 
 	return
 
 # ---------------------------------------------------------
 
-def ExpectedSignificance_ToyMC(mean_bgd, Delta_bgd, mean_sig, n_MC):
+def GenerateToyDataset( N_samples,Poisson_mean, Delta=0.):
+	h_toy = TH1D("Toy"+str(Poisson_mean),"",int(N_samples),1,N_samples)
+
+	rand = TRandom3()
+	rand1 = TRandom3()
+
+	# Loop over bins and fill them with Poisson
+	if Delta==0 :
+		mean = Poisson_mean
+
+	if Delta!=0 :
+		mean = rand1.Gaus(Poisson_mean, Delta)
+
+	for i in range(1,h_toy.GetNbinsX()+1):
+		h_toy.SetBinContent(i,rand.Poisson(mean))
+
+	return h_toy
+
+
+def ExpectedSignificance_ToyMC(mean_bgd, Delta_bgd, mean_sig, n_MC, resample=""):
+	ToySet_s = GenerateToyDataset(n_MC,mean_bgd,Delta_bgd)
+	ToySet_b = GenerateToyDataset(n_MC,mean_sig,Delta_bgd)
+	significance = 0.
+	# Calculate p-values
+	if resample != "bootstrap":
+		count = 0.
+		for i in range(1,ToySet_s.GetNbinsX()):
+			pvalue = IntegratePoissonFromRight(ToySet_s.GetBinContent(i),ToySet_s.GetBinContent(i)+ToySet_b.GetBinContent(i))
+			if( pvalue<=0. or pvalue>=1.): continue 
+			significance += ROOT.Math.gaussian_quantile_c(pvalue,1)
+			count += 1
+			#print(pvalue,"	",significance)
+
+		significance /= count
+
+	if resample == "bootstrap":
+		rand = TRandom3()
+		n_batches = 1000
+		batch_size = 200
+
+		sign_batch = np.zeros(n_batches)
+
+		for j in range(0, n_batches):
+
+			count = 0
+
+			for i in range(0,batch_size):
+				index = rand.Integer(batch_size)+1
+				pvalue = IntegratePoissonFromRight(ToySet_s.GetBinContent(index),ToySet_s.GetBinContent(index)+ToySet_b.GetBinContent(index))
+				if( pvalue<=0. or pvalue>=1.): continue 
+				sign_batch[j] += ROOT.Math.gaussian_quantile_c(pvalue,1)
+				count += 1
+			
+			sign_batch[j] /= count
+			significance += sign_batch[j]
+
+		significance /= n_batches
+
+
+
+	print("Expected significance after rescaling:	",significance)
 	
+	return
 
 
 # =========================================================================
 		
-# MAIN - RUNNING THE FUNCTIONS
 
-# MassPlot(20)
 
-# lumi = np.linspace(1,6,20)
-# sign = np.zeros(lumi.size)
-# for i in range(lumi.size):
-# 	sign[i] = SignificanceOpt(lumi[i])
-# 	# if  sign[i]>=5.0 : break 
 
-# plt.plot(lumi, sign,'.')
-# plt.plot([1,6],[5.0,5.0],linewidth=1)
-# plt.grid(linestyle='--',linewidth=1)
-# plt.show()
-
-SideBandFit()
 
 
 
