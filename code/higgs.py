@@ -2,7 +2,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import ROOT
-from ROOT import TBox, TArrow, TCanvas, TH1D, TH2D, TLine, TMath, TRandom3, TROOT, TLatex, TFile, TLegend, TLegendEntry, gROOT, gDirectory, kTRUE
+import ctypes
+from ROOT import TBox, TArrow, TCanvas, TH1D, TH2D, TLine, TMath, TRandom3, TROOT, TLatex, TFile, TLegend, TLegendEntry, gROOT, gDirectory, kTRUE, TMarker
 
 
 # ------- FUNCTIONS ---------
@@ -234,7 +235,6 @@ def SideBandFit(irebin=1):
 
 	# Loop over scalefactor (alpha_bgr)
 	h_sf_bgr = TH1D("h_sf_bgr","",100,0.5,2.5)
-	sf_bgr = 1.
 
 	for i in range(1,h_sf_bgr.GetNbinsX()+1): 
 		sf_bgr = h_sf_bgr.GetBinCenter(i)
@@ -297,34 +297,16 @@ def SideBandFit(irebin=1):
 	# Find expected background
 	bgr = h_bgr.Integral(h_bgr.FindBin(120),h_bgr.FindBin(130))
 	print("BACKGROUND - without rescaling	: ", bgr)
+	print("Best scalefactor: ",BestSF_bgd)
 	print("BACKGROUND - with rescaling	: ", BestSF_bgd*bgr," - ",LeftError*bgr,' + ',RightError*bgr)
 
 	return
 
 # ---------------------------------------------------------
 
-def GenerateToyDataset( N_samples,Poisson_mean, Delta=0.):
-	h_toy = TH1D("Toy"+str(Poisson_mean),"",int(N_samples),1,N_samples)
-
-	rand = TRandom3()
-	rand1 = TRandom3()
-
-	# Loop over bins and fill them with Poisson
-	if Delta==0 :
-		mean = Poisson_mean
-
-	if Delta!=0 :
-		mean = rand1.Gaus(Poisson_mean, Delta)
-
-	for i in range(1,h_toy.GetNbinsX()+1):
-		h_toy.SetBinContent(i,rand.Poisson(mean))
-
-	return h_toy
-
-
 def ExpectedSignificance_ToyMC(mean_bgd, Delta_bgd, mean_sig, n_MC, resample=""):
-	ToySet_s = GenerateToyDataset(n_MC,mean_bgd,Delta_bgd)
-	ToySet_b = GenerateToyDataset(n_MC,mean_sig,Delta_bgd)
+	ToySet_s = GenerateToyDataset("data")
+	ToySet_b = GenerateToyDataset("bgr")
 	significance = 0.
 	# Calculate p-values
 	if resample != "bootstrap":
@@ -366,6 +348,230 @@ def ExpectedSignificance_ToyMC(mean_bgd, Delta_bgd, mean_sig, n_MC, resample="")
 	print("Expected significance after rescaling:	",significance)
 	
 	return
+
+# -------------------------------------------------
+
+def GetTestStatistics( h_mass_data, h_temp_bgd, h_temp_sig ):
+	# Compute likelihood
+	Loglik_bgr = 0.
+	Loglik_sb = 0.
+
+	for i in range(1,h_mass_data.GetNbinsX()+1):
+		# \mu = 0 (no signal)
+		Loglik_bgr += TMath.Log( TMath.Poisson( h_mass_data.GetBinContent(i),h_temp_bgd.GetBinContent(i) ) ) 
+		# \mu = 1 (signal + background)
+		Loglik_sb += TMath.Log( TMath.Poisson( h_mass_data.GetBinContent(i),h_temp_sig.GetBinContent(i)+h_temp_bgd.GetBinContent(i) ) )
+
+	# Get likelihood ratio
+	X = 2*( Loglik_bgr-Loglik_sb )
+	return X 
+
+
+def GenerateToyDataset( h_mass_temp ):
+	h_toy = h_mass_temp.Clone("h_toy")
+	h_toy.Reset()
+
+	rand = TRandom3(0)
+
+	# Loop over bins
+	for i in range(1,h_mass_temp.GetNbinsX()+1):
+		Nbin = rand.Poisson( h_mass_temp.GetBinContent(i) )
+		h_toy.SetBinContent( i,Nbin )
+
+	return h_toy
+
+# ---------------------------------------------------
+
+def ToyDataSet( type="bgr" ):
+	if type == "bgr":
+		h_temp = GetMassDistribution(1)
+		h_mass_temp = GenerateToyDataset(h_temp)
+
+	if type == "sb":
+		h_bgr = GetMassDistribution(1)
+		h_sig = GetMassDistribution(125)
+
+		# Prepare cumulative S+B
+		h_temp = h_bgr.Clone()
+		for i in range(1,h_temp.GetNbinsX()+1):
+			h_temp.SetBinContent( i, h_bgr.GetBinContent(i)+h_sig.GetBinContent(i) )
+		h_mass_temp = GenerateToyDataset(h_temp)
+
+	if type == "data":
+		h_temp = GetMassDistribution(2)
+		h_mass_temp = GenerateToyDataset(h_temp)
+
+	return h_mass_temp
+
+# ----------------------------------------------
+
+def Quantiles(hist):
+	frac_1sigma = ROOT.Math.gaussian_cdf(-1.,1.,0.)
+	frac_2sigma = ROOT.Math.gaussian_cdf(-2.,1.,0.)
+	probs = np.array( [frac_2sigma,frac_1sigma,0.5,1-frac_1sigma, 1-frac_2sigma] )
+
+	Xvalues = np.zeros(5)
+	Xvalues_out = np.zeros(5)
+
+	# Extract quantiles
+	hist.GetQuantiles(5,Xvalues,probs)
+
+	for i in range(0,5):
+		Xvalues_out[i]=Xvalues[i]
+
+	return Xvalues_out
+
+
+
+def TestStatisticsDistribution( N_MC ):
+	h_bgr = GetMassDistribution(1)
+	h_sig = GetMassDistribution(125)
+	h_data = GetMassDistribution(2)
+
+	h_test_bgr = TH1D("test_bgr","",200,-30.,30.)
+	h_test_sb = TH1D("test_sb","",200,-30.,30.)
+
+	rand = TRandom3()
+
+	for i in range(1,N_MC+1):
+		h_toy_bgr = ToyDataSet("bgr")
+		h_toy_sb = ToyDataSet("sb")
+
+		h_test_bgr.Fill( GetTestStatistics(h_toy_bgr,h_bgr,h_sig) )
+		h_test_sb.Fill( GetTestStatistics(h_toy_sb,h_bgr,h_sig) )
+
+		if i%100==0: print("step ",i," of ",N_MC )
+			
+
+	TestStat_data = GetTestStatistics(h_data,h_bgr,h_sig)
+	print("--------------------")
+	print("Test Statistics value for real data: ",TestStat_data)
+	print("--------------------")
+
+	# Computing p-values
+
+	# DISCOVERY - CLb (b-only hypothesis) 
+	Nbins = h_test_bgr.GetNbinsX()
+	# Median b-only
+	Median_bgr = Quantiles(h_test_bgr)[2]
+	CLb_bgr = h_test_bgr.Integral(h_test_bgr.FindBin(Median_bgr),Nbins)/h_test_bgr.Integral()
+	
+	# Median s+b
+	Median_sb = Quantiles(h_test_sb)[2]
+	CLb_sb = h_test_bgr.Integral(h_test_bgr.FindBin(Median_sb),Nbins)/h_test_bgr.Integral()
+
+	# Data
+	CLb_data = h_test_bgr.Integral(h_test_bgr.FindBin(TestStat_data),h_test_bgr.GetNbinsX())/h_test_bgr.Integral()
+
+	# Print a log
+	print("==============================")
+	print("b-only hypothesis")
+	print("-----------------------------------------")
+	print("	CLb 		pvalue 		significance 	")
+	print("bgr:	",CLb_bgr,"	",1-CLb_bgr,"	",ROOT.Math.gaussian_quantile_c(1-CLb_bgr,1))
+	print("S+B:	",CLb_sb,"	",1-CLb_sb,"	",ROOT.Math.gaussian_quantile_c(1-CLb_sb,1))
+	print("Data:	",CLb_data,"	",1-CLb_data,"	",ROOT.Math.gaussian_quantile_c(1-CLb_data,1))
+	print("-----------------------------------------")
+
+
+	# CCL_{s+b} (S+B hypothesis)
+
+	CLsb_bgr = h_test_sb.Integral(h_test_bgr.FindBin(Median_bgr),h_test_sb.GetNbinsX())/h_test_sb.Integral()
+	
+	# # Median s+b
+	CLsb_sb = h_test_sb.Integral(h_test_sb.FindBin(Median_sb),h_test_sb.GetNbinsX())/h_test_sb.Integral()
+
+	# # Data
+	CLsb_data = h_test_sb.Integral(h_test_sb.FindBin(TestStat_data),h_test_sb.GetNbinsX())/h_test_sb.Integral()
+
+	print("\ns+b hypothesis")
+	print("-----------------------------------------")
+	print("	CL_sb 		pvalue 		significance 	")
+	print("bgr:	",CLsb_bgr,"	",1-CLsb_bgr,"	",ROOT.Math.gaussian_quantile_c(1-CLsb_bgr,1))
+	print("S+B:	",CLb_sb,"	",1-CLb_sb,"	",ROOT.Math.gaussian_quantile_c(1-CLsb_sb,1))
+	print("Data:	",CLsb_data,"	",1-CLsb_data,"	",ROOT.Math.gaussian_quantile_c(1-CLsb_data,1))
+	print("-----------------------------------------")
+
+	cvs = TCanvas("cvs","Standard Canvas",600,400)
+	Data_max = h_test_bgr.GetBinContent(h_test_bgr.GetMaximumBin())
+	Ymax_plot = Data_max + np.sqrt(Data_max)
+	h_test_bgr.SetAxisRange(0.,Ymax_plot,"Y")
+	line = TLine(TestStat_data,0,TestStat_data,Ymax_plot)
+
+	cvs.cd()
+
+	h_test_bgr.Draw("L")
+	h_test_sb.Draw("same L")
+	line.Draw("same")
+	cvs.Print("Plots/TestStat.pdf")
+
+# -------------------------------------------------------
+
+def MuFit(Nbins,irebin=1.):
+	# Get histrograms
+	h_bgr = GetMassDistribution(1)
+	h_data = GetMassDistribution(2)
+	h_sig = GetMassDistribution(125)
+
+	h_bgr.Rebin(irebin)
+	h_data.Rebin(irebin)
+	h_sig.Rebin(irebin)
+
+	h_sf = TH2D("scalefactor","title",Nbins,0.5,2.5,Nbins,0.,6.)
+
+	for i in range(1,h_sf.GetNbinsX()+1):
+		for j in range(1,h_sf.GetNbinsY()+1):
+
+			sf_bgr = h_sf.GetXaxis().GetBinCenter(i)
+			sf_sig = h_sf.GetYaxis().GetBinCenter(j)
+
+			# Loop over bins, compute likelihood
+			loglik = 0.
+
+			for iDataBin in range(1,h_data.GetNbinsX()+1):
+
+				m4lepBin = h_data.GetBinCenter(iDataBin)
+				NObsBin = h_data.GetBinContent(iDataBin)
+
+				MeanBin = sf_bgr*h_bgr.GetBinContent(iDataBin) + sf_sig*h_sig.GetBinContent(iDataBin)
+
+				if (MeanBin>0): loglik += TMath.Log( TMath.Poisson(NObsBin,MeanBin) )
+				
+				#print("Alpha = ",sf_bgr,"	Mu = ",sf_sig,"	likelihood = ",loglik)
+
+			h_sf.SetBinContent(i,j,-2.*loglik)
+
+	# Get best SF parameters
+
+	x=ctypes.c_int(0)
+	y=ctypes.c_int(0)
+	z=ctypes.c_int(0)
+	h_sf.GetBinXYZ(h_sf.GetMinimumBin(),x,y,z)
+	Minimum = h_sf.GetBinContent(x.value,y.value)
+	best_alpha = h_sf.GetXaxis().GetBinCenter(x.value)
+	best_mu = h_sf.GetYaxis().GetBinCenter(y.value)
+	print(Minimum,best_alpha,best_mu)
+	
+
+	# Rescale histogram
+	for i in range(1,h_sf.GetNbinsX()+1):
+		for j in range(1,h_sf.GetNbinsY()+1):
+			h_sf.SetBinContent( i,j, h_sf.GetBinContent(i,j)-Minimum )
+
+
+	canvas = TCanvas("canvas","Standard Canvas",600,400)
+	canvas.cd()
+	Min = TMarker(best_alpha,best_mu,29)
+	Min.SetMarkerSize(2)
+	h_sf.Draw("COLZ")
+	Min.Draw()
+	canvas.Print("Plots/MuFit.pdf")
+
+
+
+
+
+
 
 
 # =========================================================================
