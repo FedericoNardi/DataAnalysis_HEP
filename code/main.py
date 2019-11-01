@@ -1,4 +1,6 @@
 import higgs
+import numpy as np
+import matplotlib.pyplot as plt
 
 # MAIN - RUNNING THE FUNCTIONS
 
@@ -7,12 +9,13 @@ import higgs
 # lumi = np.linspace(1,6,20)
 # sign = np.zeros(lumi.size)
 # for i in range(lumi.size):
-# 	sign[i] = SignificanceOpt(lumi[i])
-# 	# if  sign[i]>=5.0 : break 
+# 	sign[i] = higgs.SignificanceOpt(lumi[i])
+#  	# if  sign[i]>=5.0 : break 
 
-# plt.plot(lumi, sign,'.')
+# plt.plot(lumi, sign,'.--',linewidth=1,markersize=8)
 # plt.plot([1,6],[5.0,5.0],linewidth=1)
 # plt.grid(linestyle='--',linewidth=1)
+# plt.savefig("Plots/Significance_lumi.pdf")
 # plt.show()
 
 # higgs.SideBandFit(10)
@@ -27,4 +30,6 @@ import higgs
 
 # higgs.TestStatisticsDistribution( 10000 )
 
-higgs.MuFit(50,10)
+# higgs.MuFit(500,10)
+
+print(higgs.PoissonError(3,"Bayes HDI"))

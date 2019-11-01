@@ -1,6 +1,5 @@
 
 import numpy as np
-import matplotlib.pyplot as plt
 import ROOT
 import ctypes
 from ROOT import TBox, TArrow, TCanvas, TH1D, TH2D, TLine, TMath, TRandom3, TROOT, TLatex, TFile, TLegend, TLegendEntry, gROOT, gDirectory, kTRUE, TMarker
@@ -566,6 +565,135 @@ def MuFit(Nbins,irebin=1.):
 	h_sf.Draw("COLZ")
 	Min.Draw()
 	canvas.Print("Plots/MuFit.pdf")
+
+
+# ------------------------------------
+
+def PoissonError(nObs, ErrorType, plot=""):
+	if plot=="plot": 
+		canvas1 = TCanvas("canvas1","Standard Canvas",600,400)
+		canvas1.SetLeftMargin(0.125)
+		canvas1.SetBottomMargin(0.125)
+
+	# Prepare histograms
+	LambdaMin = 0.
+	LambdaMax = nObs + 6*np.sqrt(nObs)
+	Nsteps = 10000
+	h_likelihood = TH1D( "h_likelihood","lambda likelihood",Nsteps,LambdaMin,LambdaMax)
+	h_2loglik = TH1D("h_2loglik","lambda likelihood",Nsteps,LambdaMin,LambdaMax)
+	h_pdf_full = TH1D("h_pdf_full","PDF for lambda 		",Nsteps,LambdaMin,LambdaMax)
+
+	# Standard parameters
+	Integral_fraction_1sigma = ROOT.Math.gaussian_cdf(-1,1,0)
+
+	# Loop over hypotheses of mean of the 'true' Poisson (lambda)
+	for iBin in range(1,Nsteps+1):
+		Lambda = h_likelihood.GetBinCenter(iBin)
+		# if np.abs(Lambda)<1e-9: Lambda = 1e-9
+
+		# Compute Poisson probability
+		PoissonProb = TMath.Poisson(nObs,Lambda)
+		LogLikelihood = -2.*TMath.Log( PoissonProb )
+
+		# Fill histogram for Likelihood and PDF
+		h_likelihood.Fill(Lambda, PoissonProb)
+		h_2loglik.Fill(Lambda, LogLikelihood)
+		h_pdf_full.Fill(Lambda, PoissonProb*1)
+
+	# Get characteristic values
+	bin_central = h_2loglik.GetMinimumBin()
+	LoglikMin = h_2loglik.GetBinContent(bin_central)
+	Lambda_central = h_2loglik.GetBinCenter(bin_central)
+
+	# Compute error region
+
+	Lambda_1sigma_low = -1.
+	Lambda_1sigma_up = -1.
+
+	# FREQUENTIST 
+	if ErrorType=="Classical Central":
+		NobsMax = nObs+100
+
+		for ibin in range(h_pdf_full.GetNbinsX()+1): # loop over lambda
+			Lambda = h_pdf_full.GetBinCenter(ibin)
+			PoissonSum_low = 0.
+			PoissonSum_up = 0.
+
+			# lower value
+			for i in range(nObs,NobsMax+1):
+				PoissonSum_low += TMath.Poisson(i, Lambda)
+
+			if (PoissonSum_low>Integral_fraction_1sigma and Lambda_1sigma_low<0.):
+				Lambda_1sigma_low = Lambda
+
+			# upper value
+			for i in range(0,nObs+1):
+				PoissonSum_up += TMath.Poisson(i,Lambda)
+
+			if (PoissonSum_up<Integral_fraction_1sigma and Lambda_1sigma_up < 0.):
+				Lambda_1sigma_up = Lambda
+
+	if ErrorType=="Likelihood Ratio":
+		for i in range(1,h_2loglik.GetNbinsX()+1):
+			if (h_2loglik.GetBinCenter(i)<LoglikMin and h_2loglik.GetBinContent(i)-LoglikMin>=1.):  Lambda_1sigma_low=h_2loglik.GetBinCenter(i)
+			if (h_2loglik.GetBinCenter(i)>LoglikMin and h_2loglik.GetBinContent(i)-LoglikMin<=1.):  Lambda_1sigma_up=h_2loglik.GetBinCenter(i)
+
+
+	if ErrorType=="Bayes Central": 
+		# Work on likelihood as PDF
+		Integral = h_likelihood.Integral()
+		for i in range(1,h_likelihood.GetNbinsX()+1):
+			h_likelihood.SetBinContent(i,h_likelihood.GetBinContent(i)/Integral)
+
+		# Sum over bins until reached CL
+		Sum_low = 0.
+		Sum_up = 0.
+		for i in range(1,bin_central+1):
+			if Sum_low<=Integral_fraction_1sigma:
+				Sum_low += h_likelihood.GetBinContent(i)
+				Lambda_1sigma_low = h_likelihood.GetBinCenter(i)
+		for i in range(h_likelihood.GetNbinsX(),bin_central,-1):
+			if Sum_up<=Integral_fraction_1sigma:
+				Sum_up += h_likelihood.GetBinContent(i)
+				Lambda_1sigma_up = h_likelihood.GetBinCenter(i)
+
+
+	if ErrorType=="Bayes HDI":
+		# Work on likelihood as PDF
+		Integral = h_likelihood.Integral()
+		for i in range(1,h_likelihood.GetNbinsX()+1):
+			h_likelihood.SetBinContent(i,h_likelihood.GetBinContent(i)/Integral)
+
+		Area = 0.	
+		RightIndex=bin_central
+		while Area<=(1-2*Integral_fraction_1sigma):
+			RightIndex+=1
+			# find corresponding bin on left side
+			for i in range(1,bin_central):
+				if h_likelihood.GetBinContent(i)<=h_likelihood.GetBinContent(RightIndex): 
+					LeftIndex=i
+			Area = h_likelihood.Integral( LeftIndex,RightIndex )
+
+		Lambda_1sigma_low = h_likelihood.GetBinCenter(LeftIndex)
+		Lambda_1sigma_up = h_likelihood.GetBinCenter(RightIndex)
+
+	return [Lambda_1sigma_low, Lambda_1sigma_up]
+
+
+
+
+
+#	if plot=="plot":
+#		NobsMax = nObs+25
+
+#		h1 = TH1D("h1", "poisson probability (sec)	",NobsMax+1,-0.5,NobsMax+0.5)
+#		h_up = TH1D("h_up", "poisson probability (n >=nobs)", NobsMax+1,-0.5,NobsMax+0.5)
+#		h_low = TH1D("h_low", "poisson probability (n >=nobs)", NobsMax+1,-0.5,NobsMax)
+
+
+
+
+
 
 
 

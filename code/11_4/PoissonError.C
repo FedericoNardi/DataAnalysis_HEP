@@ -48,13 +48,13 @@ void ComputeAllErrorRegions(){
   printf("\n");
   printf("  Observed number of events = %d\n\n",n_obs);
   printf("  Error region:\n");
-  PoissonError(n_obs,ErrorRange,1); //  Method 1: Classical central
+  PoissonError(n_obs,ErrorRange,1,1); //  Method 1: Classical central
   printf("    Method 1 (classical central):  %5.2f - %5.2f\n",ErrorRange[0],ErrorRange[2]);
-  PoissonError(n_obs,ErrorRange,2); //  Method 2: Likelihood ratio
+  PoissonError(n_obs,ErrorRange,2,1); //  Method 2: Likelihood ratio
   printf("    Method 2 (likelihood ratio):   %5.2f - %5.2f\n",ErrorRange[0],ErrorRange[2]);
-  PoissonError(n_obs,ErrorRange,3); //  Method 3: Bayesian  central (flat prior - left/right integral = 16% )
+  PoissonError(n_obs,ErrorRange,3,1); //  Method 3: Bayesian  central (flat prior - left/right integral = 16% )
   printf("    Method 3 (Bayes central - 1):  %5.2f - %5.2f\n",ErrorRange[0],ErrorRange[2]);
-  PoissonError(n_obs,ErrorRange,4); //  Method 4: Bayesian  central (flat prior - integrate pdf (equaly prob) 68%)
+  PoissonError(n_obs,ErrorRange,4,1); //  Method 4: Bayesian  central (flat prior - integrate pdf (equaly prob) 68%)
   printf("    Method 4 (Bayes central - 2):  %5.2f - %5.2f\n",ErrorRange[0],ErrorRange[2]);
   printf("\n");
   
@@ -309,7 +309,8 @@ void PoissonError(int n_obs, double * ErrorRange, int IErrorType, int Iplot){
      Int_t Nobs_max = n_obs + 25;
      TH1D *h_1   = new TH1D("h_1",   "poisson probability (sec)      ", Nobs_max+1, -0.5,Nobs_max+0.5);
      TH1D *h_up  = new TH1D("h_up",  "poisson probability (n >= nobs)", Nobs_max+1, -0.5,Nobs_max+0.5);
-     TH1D *h_low = new TH1D("h_low", "poisson probability (n <= nobs)", Nobs_max+1, -0.5,Nobs_max+0.5);  
+     TH1D *h_low = new TH1D("h_low", "poisson probability (n <= nobs)", Nobs_max+1, -0.5,Nobs_max+0.5);
+  
      double lambda = 0.00;
      if(Iplot == 1) {
      	lambda = Lambda_1sigma_low;
@@ -337,17 +338,18 @@ void PoissonError(int n_obs, double * ErrorRange, int IErrorType, int Iplot){
      h_1->Draw();
      AddText( 0.900, 0.035, "Number of events",0.060,0.,"right");             // X-axis
      AddText( 0.050, 0.900, "Poisson probability",0.060,90.,"right");         // Y-axis
-     AddText( 0.800, 0.750, Form("#lambda = %5.2f",lambda),0.060,0.,"right");      if(Iplot == 1){
+     AddText( 0.800, 0.750, Form("#lambda = %5.2f",lambda),0.060,0.,"right"); 
+     if(Iplot == 1){
        h_up->SetFillColor(5);   
        h_up->Draw("same");
        h_1->Draw("axis same");
-       canvas1->Print("./PoissonError_frequentist_low.gif");
+       canvas1->Print("./Plots/PoissonError_frequentist_low.gif");
      }
      if(Iplot == 2){
        h_low->SetFillColor(5);   
        h_low->Draw("same");
        h_1->Draw("axis same");
-       canvas1->Print("./PoissonError_frequentist_up.gif");
+       canvas1->Print("./Plots/PoissonError_frequentist_up.gif");
      }
   } // end plot with option 1 (classic central)
 
@@ -358,17 +360,23 @@ void PoissonError(int n_obs, double * ErrorRange, int IErrorType, int Iplot){
       if(Iplot ==  1){ 
   	     //h_pdf_full->SetAxisRange(0.,20.,"X");
          //h_pdf_full->SetAxisRange(0.,40.,"Y"); 
-         h_pdf_full->Draw();         AddText( 0.900, 0.035, "#lambda",0.060,0.,"right");          canvas1->Print("./PoissonError_likelihood_pdf.gif");
+         h_pdf_full->Draw();
+         AddText( 0.900, 0.035, "#lambda",0.060,0.,"right"); 
+         canvas1->Print("./Plots/PoissonError_likelihood_pdf.gif");
       }
       if(Iplot ==  2){ 
 	     h_min2loglikelihood->SetAxisRange(0.,20.,"X");
          h_min2loglikelihood->SetAxisRange(0.,40.,"Y"); 
-         h_min2loglikelihood->Draw();         AddText( 0.900, 0.035, "#lambda",0.060,0.,"right");          canvas1->Print("./PoissonError_likelihood.gif");
+         h_min2loglikelihood->Draw();
+         AddText( 0.900, 0.035, "#lambda",0.060,0.,"right"); 
+         canvas1->Print("./Plots/PoissonError_likelihood.gif");
       }
       if(Iplot ==  3){ 
   	     h_min2loglikelihood->SetAxisRange(1.50,8.00,"X");
          h_min2loglikelihood->SetAxisRange(3.00,5.00,"Y"); 
-         h_min2loglikelihood->Draw();         AddText( 0.900, 0.035, "#lambda",0.060,0.,"right");          canvas1->Print("./PoissonError_likelihood_zoom.gif");
+         h_min2loglikelihood->Draw();
+         AddText( 0.900, 0.035, "#lambda",0.060,0.,"right"); 
+         canvas1->Print("./Plots/PoissonError_likelihood_zoom.gif");
       }
    }   // end plot 2 (likelihood ratio)
 
@@ -410,11 +418,11 @@ void PoissonError(int n_obs, double * ErrorRange, int IErrorType, int Iplot){
       AddText( 0.75, 0.800, Form("N(obs) = %d",n_obs),0.050,0.,"left");  
 
       if(IErrorType == 3){
-      	 canvas1->Print("./PoissonError_bayes_leftright.gif");
+      	 canvas1->Print("./Plots/PoissonError_bayes_leftright.pdf");
       }
 
       if(IErrorType == 4){
-      	 canvas1->Print("./PoissonError_bayes_equalprob.gif");
+      	 canvas1->Print("./Plots/PoissonError_bayes_equalprob.pdf");
       }
 
    }   // end plot 3 or 4 (Bayes)
