@@ -303,48 +303,29 @@ def SideBandFit(irebin=1):
 
 # ---------------------------------------------------------
 
-def ExpectedSignificance_ToyMC(mean_bgd, Delta_bgd, mean_sig, n_MC, resample=""):
-	ToySet_s = GenerateToyDataset("data")
-	ToySet_b = GenerateToyDataset("bgr")
-	significance = 0.
+def ExpectedSignificance_ToyMC(mean_bgd, Delta_bgd, mean_sig, n_MC):
+	gROOT.Clear()
+	gROOT.Delete()
+
+	# Define count histograms
+	h_Nbgr = TH1D("h_Nbgr","Background events",500,-0.5,499.5)
+
+	# Initialize seed
+	rand = TRandom3()
+	
+	# Generate toy datasets
+	for i in range(1,n_MC+1):
+		mean_bgr = rand.Gaus(mean_bgd, Delta_bgd)
+		mean_sb = rand.Gaus(mean_bgd, Delta_bgd)+mean_sig
+		
+		h_Nbgr.Fill(rand.Poisson(mean_bgr))
+
 	# Calculate p-values
-	if resample != "bootstrap":
-		count = 0.
-		for i in range(1,ToySet_s.GetNbinsX()):
-			pvalue = IntegratePoissonFromRight(ToySet_s.GetBinContent(i),ToySet_s.GetBinContent(i)+ToySet_b.GetBinContent(i))
-			if( pvalue<=0. or pvalue>=1.): continue 
-			significance += ROOT.Math.gaussian_quantile_c(pvalue,1)
-			count += 1
-			#print(pvalue,"	",significance)
+	pvalue = h_Nbgr.Integral(h_Nbgr.FindBin(mean_bgd+mean_sig),h_Nbgr.GetNbinsX())/h_Nbgr.Integral()
+	significance = ROOT.Math.gaussian_quantile_c(pvalue,1)
+	#print(pvalue,"	",significance)
 
-		significance /= count
-
-	if resample == "bootstrap":
-		rand = TRandom3()
-		n_batches = 1000
-		batch_size = 200
-
-		sign_batch = np.zeros(n_batches)
-
-		for j in range(0, n_batches):
-
-			count = 0
-
-			for i in range(0,batch_size):
-				index = rand.Integer(batch_size)+1
-				pvalue = IntegratePoissonFromRight(ToySet_s.GetBinContent(index),ToySet_s.GetBinContent(index)+ToySet_b.GetBinContent(index))
-				if( pvalue<=0. or pvalue>=1.): continue 
-				sign_batch[j] += ROOT.Math.gaussian_quantile_c(pvalue,1)
-				count += 1
-			
-			sign_batch[j] /= count
-			significance += sign_batch[j]
-
-		significance /= n_batches
-
-
-
-	print("Expected significance after rescaling:	",significance)
+	print('Expected significance after rescaling:	',significance)
 	
 	return
 

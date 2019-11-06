@@ -20,7 +20,7 @@ import matplotlib.pyplot as plt
 
 # higgs.SideBandFit(10)
 
-# higgs.ExpectedSignificance_ToyMC(6.42,0.,5.96,1e6,"bootstrap")
+higgs.ExpectedSignificance_ToyMC(7.10,0.41,5.96,1000000)
 
 #h_data = higgs.GetMassDistribution(2)
 #h_sig = higgs.GetMassDistribution(125)
@@ -32,4 +32,4 @@ import matplotlib.pyplot as plt
 
 # higgs.MuFit(500,10)
 
-print(higgs.PoissonError(3,"Bayes HDI"))
+# print(higgs.PoissonError(3,"Bayes HDI"))
