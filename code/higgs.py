@@ -390,6 +390,7 @@ def SideBandFit(irebin=1):
 
 # ---------------------------------------------------------
 
+<<<<<<< HEAD
 def ExpectedSignificance_ToyMC(n_MC,lumi=1.,profile='n'):
 	masswindow = 7.15
 	signal = GetMassDistribution(125,lumi)
@@ -441,6 +442,31 @@ def ExpectedSignificance_ToyMC(n_MC,lumi=1.,profile='n'):
 
 
 	print("Expected significance after rescaling:	",sign)
+=======
+def ExpectedSignificance_ToyMC(mean_bgd, Delta_bgd, mean_sig, n_MC):
+	gROOT.Clear()
+	gROOT.Delete()
+
+	# Define count histograms
+	h_Nbgr = TH1D("h_Nbgr","Background events",500,-0.5,499.5)
+
+	# Initialize seed
+	rand = TRandom3()
+	
+	# Generate toy datasets
+	for i in range(1,n_MC+1):
+		mean_bgr = rand.Gaus(mean_bgd, Delta_bgd)
+		mean_sb = rand.Gaus(mean_bgd, Delta_bgd)+mean_sig
+		
+		h_Nbgr.Fill(rand.Poisson(mean_bgr))
+
+	# Calculate p-values
+	pvalue = h_Nbgr.Integral(h_Nbgr.FindBin(mean_bgd+mean_sig),h_Nbgr.GetNbinsX())/h_Nbgr.Integral()
+	significance = ROOT.Math.gaussian_quantile_c(pvalue,1)
+	#print(pvalue,"	",significance)
+
+	print('Expected significance after rescaling:	',significance)
+>>>>>>> d9917d8b1e4da915546f1c360a93a5a489f084e8
 	
 	return sign
 

@@ -54,6 +54,12 @@ def IncreaseLumi(method="",npoints=50):
 # plt.savefig("Plots/Significance_lumi_scale.pdf")
 # plt.show()
 
+<<<<<<< HEAD
+=======
+# higgs.SideBandFit(10)
+
+higgs.ExpectedSignificance_ToyMC(7.10,0.41,5.96,1000000)
+>>>>>>> d9917d8b1e4da915546f1c360a93a5a489f084e8
 
 h_data = higgs.GetMassDistribution(2)
 h_sig = higgs.GetMassDistribution(125)
@@ -65,4 +71,8 @@ higgs.TestStatisticsDistribution( 10000 )
 
 # higgs.MuFit(500,10)
 
+<<<<<<< HEAD
 # print(higgs.PoissonError(3,"Bayes HDI"))
+=======
+# print(higgs.PoissonError(3,"Bayes HDI"))
+>>>>>>> d9917d8b1e4da915546f1c360a93a5a489f084e8
