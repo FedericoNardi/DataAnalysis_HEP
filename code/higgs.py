@@ -2,7 +2,7 @@
 import numpy as np
 import ROOT
 import ctypes
-from ROOT import TBox, TArrow, TCanvas, TH1D, TH2D, TLine, TMath, TRandom3, TROOT, TLatex, TFile, TLegend, TLegendEntry, gROOT, gDirectory, kTRUE, TMarker
+from ROOT import TBox, TArrow, TCanvas, TH1D, TH2D, TLine, TMath, TRandom3, TROOT, TLatex, TFile, TLegend, TLegendEntry, gROOT, gDirectory, kTRUE, kFALSE, TMarker
 
 
 # ------- FUNCTIONS ---------
@@ -43,13 +43,15 @@ def AddText(txt_x=0.50, txt_y=0.50, txt="dummy", txt_size=0.045, txt_angle=0, Al
 		txt_align = 12
 	if Alignment == "right":
 		txt_align = 32
-	if Alignment == "right":
+	if Alignment == "center":
 		txt_align = 22
 
-	t1 = TLatex(txt_x, txt_y, txt)
+	t1 = TLatex(txt_x, txt_y, txt ) 
 	
 	if UseNormalizedSize: 
 		t1.SetNDC(kTRUE)
+
+	#canvas.cd()
 	
 	t1.SetTextSize(txt_size)
 	t1.SetTextAlign(txt_align)
@@ -66,9 +68,10 @@ def MassPlot(Irebin):
 	gROOT.Delete()
 
 	# Prepare canvas
-	c1 = TCanvas("canvas1","Standard Canvas",600,400)
+	c1 = TCanvas("c1","Standard Canvas",600,400)
 	c1.SetLeftMargin(0.125)
 	c1.SetBottomMargin(0.125)
+	#c1.SetLogy()
 	c1.cd()
 
 	# Prepare histograms
@@ -83,34 +86,89 @@ def MassPlot(Irebin):
 	# cumulative S+B
 	h_SB = h_bgr.Clone("h_SB")
 	h_SB.Reset()
-	for i in range(0,h_bgr.GetNbinsX()):
+	for i in range(1,h_bgr.GetNbinsX()+1):
 		h_SB.SetBinContent(i, h_sig.GetBinContent(i)+h_bgr.GetBinContent(i) )
 
 		print(" REBINNED HISTOGRAM: bin", i, "Ndata = ",h_data.GetBinContent(i),"\n")
+
+
+
+	h_fit = h_SB.Clone("h_fit")
+	h_fit.Reset()
+
+	for i in range( 0,h_bgr.GetNbinsX() ):
+		if( h_SB.GetBinCenter(i)>=150 and h_fit.GetBinCenter(i)>=400 ):	h_fit.SetBinContent(i, h_SB.GetBinContent(i) )
+
+
 
 	# prepare and plot histograms
 	Data_max = h_data.GetBinContent(h_data.GetMaximumBin())
 	Ymax_plot = 1.20*(Data_max + 0.1*(Data_max))
 	h_SB.SetFillColor(7)
-	h_SB.SetAxisRange(0.,Ymax_plot,"Y")
-	h_SB.SetAxisRange(0.,400.,"X")
+	h_SB.SetAxisRange(1,Ymax_plot,"Y")
+	h_SB.SetAxisRange(0,400.,"X")
 	h_bgr.SetFillColor(2)
+
+	h_SB.SetTitle("4-LEPTON INVARIANT MASS DISTRIBUTION")
+
+
+	h_SB.GetXaxis().SetTitle("m [GeV]")
+	h_SB.SetTitleSize(0.05,"X")
+	h_SB.SetTitleOffset(0.9,"X")
+
+
+	h_SB.GetYaxis().SetTitle("counts")
+	h_SB.SetTitleSize(0.05,"Y")
+	h_SB.SetTitleOffset(0.7,"Y")
+	
+
 	h_SB.Draw("hist")
 	h_bgr.Draw("same")
 	h_bgr.Draw("axis same")
 	h_data.Draw("e same")
 
 	# image format
-	AddText(0.900,0.035,"4-lepton invariant mass [GeV]",0.060,0.,"right")
-	AddText(0.040,0.900, "Number of events / "+str(h_bgr.GetBinWidth(1))+" GeV", 0.060, 90., "right")
-	leg1 = TLegend(0.65,0.65,0.90,0.85)
-	leg1.SetBorderSize(0); leg1.SetFillColor(0);
+	#AddText(0.900,0.035,"4-lepton invariant mass [GeV]",0.060,0.,"right")
+	#AddText(0.040,0.900, "Number of events / "+str(h_bgr.GetBinWidth(1))+" GeV", 0.060, 90., "right")
+	leg1 = TLegend(0.70,0.70,0.90,0.85)
+	leg1.SetBorderSize(1); leg1.SetFillColor(0); #leg1.SetO
 	leg1a = leg1.AddEntry(h_bgr, "SM(ZZ)", "f"); leg1a.SetTextSize(0.04);
 	leg1b = leg1.AddEntry(h_SB, "Higgs", "f"); leg1b.SetTextSize(0.04);
 	leg1.Draw()
 
 	# save image
 	c1.Print("Plots/MassPlot_rebin"+str(Irebin)+".pdf")
+
+	h_fit = h_SB.Clone("h_fit")
+	h_fit.Reset()
+
+	for i in range( 0,h_bgr.GetNbinsX() ):
+		if( h_SB.GetBinCenter(i)>=150 and h_fit.GetBinCenter(i)<=400 ):	h_fit.SetBinContent(i, h_SB.GetBinContent(i) )
+
+	# printing plot for sidebandfit
+
+	c2 = TCanvas("c2","Standard Canvas",600,400)
+	c2.SetLeftMargin(0.125)
+	c2.SetBottomMargin(0.125)
+	c2.cd()
+
+	h_SB.SetAxisRange(1,20,"Y")
+	h_fit.SetAxisRange(0,400.,"X")
+
+	h_fit.SetFillColor(8);
+
+	h_SB.SetFillColor(0); h_SB.SetLineColor(9); h_SB.SetTitle("SIDE-BAND FIT REGION")
+	h_bgr.SetFillColor(0); h_bgr.SetLineColor(1)
+
+	h_SB.Draw("hist")
+	h_bgr.Draw("hist same")
+	h_fit.Draw("hist same")
+	h_data.Draw("e same")
+	leg1.Draw()
+
+	c2.Print("Plots/Sideband_region.pdf")
+
+
 
 	return
 
@@ -124,11 +182,11 @@ def IntegratePoissonFromRight(mu, Nobs):
 
 # --------------------------------------------------------------------------
 
-def SignificanceOpt(Lumi_scalefactor = 1.00, plot = "n"):
-	print("------- Significance Optimization -------/n")
+def SignificanceOpt(Lumi_scalefactor = 1.00, plot = "n",speak="") :
+	if speak!='mute': print("------- Significance Optimization -------")
 	
 	# Prepare histograms
-	print("/n Info: Mass distribution in the 4 lepton channel/n")
+	if speak!='mute': print(" Info: Mass distribution in the 4 lepton channel")
 	
 	h_sig = GetMassDistribution(125, Lumi_scalefactor)
 	h_bgr = GetMassDistribution(1, Lumi_scalefactor)
@@ -145,14 +203,14 @@ def SignificanceOpt(Lumi_scalefactor = 1.00, plot = "n"):
 	for i in range( 0,h_masswindow.GetNbinsX() ):
 		masswindow_fullwidth = h_masswindow.GetBinCenter(i)
 
-		print("	Trying as mass window: ",masswindow_fullwidth," GeV\n")
+		if speak!='mute': print("	Trying as mass window: ",masswindow_fullwidth," GeV\n")
 		
 		# determine events in the mass window for each event type
 		Ndata = h_data.Integral( h_data.FindBin(125-0.5*masswindow_fullwidth),h_data.FindBin(125+0.5*masswindow_fullwidth) )
 		Nbgr =  h_bgr.Integral( h_bgr.FindBin(125-0.5*masswindow_fullwidth),h_bgr.FindBin(125+0.5*masswindow_fullwidth) )
 		Nsig = h_sig.Integral( h_sig.FindBin(125-0.5*masswindow_fullwidth),h_sig.FindBin(125+0.5*masswindow_fullwidth) )
 
-		print("Number of events: ", Nsig, "\n")
+		if speak!='mute': print("Number of events: ", Nsig, "\n")
 		
 		if( (Nbgr+Nsig)<1 ): continue 
 
@@ -165,16 +223,19 @@ def SignificanceOpt(Lumi_scalefactor = 1.00, plot = "n"):
 		pvalue_obs = IntegratePoissonFromRight(Nbgr, Ndata)
 		significance_obs = ROOT.Math.gaussian_quantile_c(pvalue_obs,1)
 		h_masswindow_obs.SetBinContent(i, significance_obs)
+		if(pvalue_obs<0): continue
+
 		
 	# Getting maximum
 	MaxBin_exp = h_masswindow_exp.GetMaximumBin()
 	OptimumSign_exp = h_masswindow_exp.GetBinContent(MaxBin_exp)
 	OptMassWindow_exp = h_masswindow_exp.GetXaxis().GetBinCenter(MaxBin_exp)
 
-	print("Luminosity factor: ", Lumi_scalefactor,"\n")
-	print("EXPECTED significance - Optimal mass window\n")
-	print("	Expected significance: ",OptimumSign_exp,"\n")
-	print("	Mass window: ", OptMassWindow_exp, "\n")
+	if speak!='mute':
+		print("Luminosity factor: ", Lumi_scalefactor,"\n")
+		print("EXPECTED significance - Optimal mass window\n")
+		print("	Expected significance: ",OptimumSign_exp,"\n")
+		print("	Mass window: ", OptMassWindow_exp, "\n")
 		
 	if( abs(Lumi_scalefactor-1.0)<0.01 ):
 	
@@ -182,10 +243,11 @@ def SignificanceOpt(Lumi_scalefactor = 1.00, plot = "n"):
 		OptimumSign_obs = h_masswindow_obs.GetBinContent(MaxBin_obs)
 		OptMassWindow_obs = h_masswindow_obs.GetXaxis().GetBinCenter(MaxBin_obs)
 
-		print("Luminosity factor: ", Lumi_scalefactor,"\n")
-		print("OBSERVED significance - Optimal mass window\n")
-		print("	Observed significance: ",OptimumSign_exp,"\n")
-		print("	Mass window: ", OptMassWindow_exp, "\n")
+		if speak!='mute':
+			print("Luminosity factor: ", Lumi_scalefactor,"\n")
+			print("OBSERVED significance - Optimal mass window\n")
+			print("	Observed significance: ",OptimumSign_obs,"\n")
+			print("	Mass window: ", OptMassWindow_obs, "\n")
 
 	# plot and save histograms
 	if(plot == "y"):
@@ -200,18 +262,26 @@ def SignificanceOpt(Lumi_scalefactor = 1.00, plot = "n"):
 		h_masswindow_obs.SetLineWidth(2);
 
 		h_masswindow_exp.SetAxisRange(-1.,6.,"Y");
+		h_masswindow_exp.SetStats(kFALSE)
+
+		h_masswindow_exp.SetTitle("OPTIMAL MASS WINDOW")
+
+		h_masswindow_exp.GetXaxis().SetTitle("mass window [GeV]")
+		h_masswindow_exp.GetYaxis().SetTitle("significance Z")
+
+		leg1 = TLegend(0.70,0.70,0.90,0.85)
+		leg1.SetBorderSize(1); leg1.SetFillColor(0); #leg1.SetO
+		leg1a = leg1.AddEntry(h_masswindow_exp, "expected", "l"); leg1a.SetTextSize(0.04);
+
+
+
+
 		h_masswindow_exp.Draw("l");
 		if( abs(Lumi_scalefactor-1.00)<0.01 ):
 			h_masswindow_obs.Draw("l same");
+			leg1b = leg1.AddEntry(h_masswindow_obs, "observed", "l"); leg1b.SetTextSize(0.04);
 
-		# axes
-		AddText( 0.900, 0.035, "Mass window GeV",0.060, 0.,"right"); # X-axis
-		AddText( 0.040, 0.900, "Significance" ,0.060,90.,"right");   # Y-axis    
-		AddText( 0.225, 0.825, "Luminosity scalefactor = "+str(Lumi_scalefactor),0.050, 0.,"left");            
-
-		AddText( 0.700, 0.200, "Expected significance",0.050, 0.,"right",1,1);                        
-		if( abs(Lumi_scalefactor-1.00)<0.01 ):
-			AddText( 0.700, 0.300, "Observed significance",0.050, 0.,"right",1,4);                        
+		leg1.Draw()                        
 
 		canvas1.Print("Plots/Significance_Optimization_lumiscalefactor"+str(Lumi_scalefactor)+".pdf");
 
@@ -233,7 +303,7 @@ def SideBandFit(irebin=1):
 	print("INFO: Rebinning histograms with factor",irebin,". Binwidth: ",h_data.GetBinWidth(1))
 
 	# Loop over scalefactor (alpha_bgr)
-	h_sf_bgr = TH1D("h_sf_bgr","",100,0.5,2.5)
+	h_sf_bgr = TH1D("h_sf_bgr","",100,0.8,1.5)
 
 	for i in range(1,h_sf_bgr.GetNbinsX()+1): 
 		sf_bgr = h_sf_bgr.GetBinCenter(i)
@@ -246,7 +316,7 @@ def SideBandFit(irebin=1):
 			m4lepBin = h_data.GetBinCenter(j)
 			NObsBin = h_data.GetBinContent(j)
 
-			if ( m4lepBin>=150. and m4lepBin<=400.): # CHECK: walktrough ha stesso segno
+			if ( m4lepBin>=150. and m4lepBin<=400.): 
 				MeanBgdBin = sf_bgr * h_bgr.GetBinContent(j)
 
 				if MeanBgdBin>0.: loglik += TMath.Log( TMath.Poisson(NObsBin,MeanBgdBin) )
@@ -266,22 +336,16 @@ def SideBandFit(irebin=1):
 	BestSF_bgd = h_sf_bgr.GetBinCenter(MinBin)
 
 	# Rescale and find \pm 1\sigma errors
-	LeftLim = -1.
-	RightLim = BestSF_bgd
-
 	for i in range(1,h_sf_bgr.GetNbinsX()+1):
-		h_sf_bgr_rescaled.SetBinContent(i,h_sf_bgr.GetBinContent(i)-Minimum)
+		h_sf_bgr_rescaled.SetBinContent(i,Minimum-h_sf_bgr.GetBinContent(i))
 
-		if( h_sf_bgr_rescaled.GetBinCenter(i)<BestSF_bgd and h_sf_bgr_rescaled.GetBinContent(i)>=1 ):
-			LeftLim = h_sf_bgr.GetBinCenter(i)
-			
-		if( h_sf_bgr_rescaled.GetBinCenter(i)>BestSF_bgd and h_sf_bgr_rescaled.GetBinContent(i)<=1 ):
-			RightLim = h_sf_bgr.GetBinCenter(i)
+	LeftLim = h_sf_bgr.GetBinCenter( h_sf_bgr_rescaled.FindFirstBinAbove(-1)-1 )
+	RightLim = h_sf_bgr.GetBinCenter( h_sf_bgr_rescaled.FindLastBinAbove(-1)+1 )
 
-	# Print summary
 	LeftError = BestSF_bgd - LeftLim
 	RightError = RightLim - BestSF_bgd
 
+	# Print summary
 	print("   ----------\n","   Result fit: \n","   ----------","Background scale factor from sideband fit: ",BestSF_bgd," - ",LeftError," + ",RightError)
 
 	# Plot histogram
@@ -289,64 +353,96 @@ def SideBandFit(irebin=1):
 	canvas1.SetLeftMargin(0.175)
 	canvas1.SetBottomMargin(0.125)
 	canvas1.cd()
+	h_sf_bgr_rescaled.SetStats(kFALSE)
+
+	h_sf_bgr_rescaled.SetTitle("Background scale factor")
+
+	h_sf_bgr_rescaled.GetXaxis().SetTitle("scale factor")
+	h_sf_bgr_rescaled.GetYaxis().SetTitle("2 log L")
+	#h_sf_bgr_rescaled.SetAxisRange(1,-1	,"Y")
 	h_sf_bgr_rescaled.Draw("C")
+
+	CenterLine = TLine(BestSF_bgd,0,BestSF_bgd,-31)
+	CenterLine.SetLineColor(2)
+	LeftLine = TLine(LeftLim,Minimum-h_sf_bgr.GetBinContent( h_sf_bgr_rescaled.FindFirstBinAbove(-1)-1 ),LeftLim,-31)
+	LeftLine.SetLineColor(40)
+	RightLine = TLine(RightLim,Minimum-h_sf_bgr.GetBinContent( h_sf_bgr_rescaled.FindLastBinAbove(-1)+1 ),RightLim,-31)
+	RightLine.SetLineColor(40)
+
+	CenterLine.Draw("same axis")
+	LeftLine.Draw("same axis")
+	RightLine.Draw("same axis")
+
 	canvas1.Print("Plots/SideBandFit.pdf")
 
 
 	# Find expected background
-	bgr = h_bgr.Integral(h_bgr.FindBin(120),h_bgr.FindBin(130))
+	bgr = h_bgr.Integral(h_bgr.FindBin(125.-0.5*7.15),h_bgr.FindBin(125+0.5*7.15))
+	sig = GetMassDistribution(125).Integral(h_bgr.FindBin(125.-0.5*7.15),h_bgr.FindBin(125+0.5*7.15))
+	obs = h_data.Integral(h_bgr.FindBin(125.-0.5*7.15),h_bgr.FindBin(125+0.5*7.15))
 	print("BACKGROUND - without rescaling	: ", bgr)
 	print("Best scalefactor: ",BestSF_bgd)
 	print("BACKGROUND - with rescaling	: ", BestSF_bgd*bgr," - ",LeftError*bgr,' + ',RightError*bgr)
+	print("SIGNAL EVENTS:	",sig)
+	print("OBSERVED EVENTS:	",obs)
 
 	return
 
 # ---------------------------------------------------------
 
-def ExpectedSignificance_ToyMC(mean_bgd, Delta_bgd, mean_sig, n_MC, resample=""):
-	ToySet_s = GenerateToyDataset("data")
-	ToySet_b = GenerateToyDataset("bgr")
-	significance = 0.
-	# Calculate p-values
-	if resample != "bootstrap":
-		count = 0.
-		for i in range(1,ToySet_s.GetNbinsX()):
-			pvalue = IntegratePoissonFromRight(ToySet_s.GetBinContent(i),ToySet_s.GetBinContent(i)+ToySet_b.GetBinContent(i))
-			if( pvalue<=0. or pvalue>=1.): continue 
-			significance += ROOT.Math.gaussian_quantile_c(pvalue,1)
-			count += 1
-			#print(pvalue,"	",significance)
+def ExpectedSignificance_ToyMC(n_MC,lumi=1.,profile='n'):
+	masswindow = 7.15
+	signal = GetMassDistribution(125,lumi)
+	bgr = GetMassDistribution(1,lumi)
 
-		significance /= count
+	Delta_bgd=0
 
-	if resample == "bootstrap":
-		rand = TRandom3()
-		n_batches = 1000
-		batch_size = 200
+	mean_bgd = bgr.Integral(bgr.FindBin(125-0.5*masswindow),bgr.FindBin(125+0.5*masswindow))
+	if profile=='y': Delta_bgd = 0.5*(0.06+0.07)*mean_bgd; mean_bgd*=1.104; 
 
-		sign_batch = np.zeros(n_batches)
+	mean_sig = signal.Integral(signal.FindBin(125-0.5*masswindow),signal.FindBin(125+0.5*masswindow))
 
-		for j in range(0, n_batches):
-
-			count = 0
-
-			for i in range(0,batch_size):
-				index = rand.Integer(batch_size)+1
-				pvalue = IntegratePoissonFromRight(ToySet_s.GetBinContent(index),ToySet_s.GetBinContent(index)+ToySet_b.GetBinContent(index))
-				if( pvalue<=0. or pvalue>=1.): continue 
-				sign_batch[j] += ROOT.Math.gaussian_quantile_c(pvalue,1)
-				count += 1
-			
-			sign_batch[j] /= count
-			significance += sign_batch[j]
-
-		significance /= n_batches
+	print("----------------------------")
+	print("	Background events:	",mean_bgd,"	+/-	",Delta_bgd)
+	print(" Signal events:	",mean_sig)
+	print("----------------------------")
 
 
+	sign = 0.
 
-	print("Expected significance after rescaling:	",significance)
+	rand = TRandom3(42)
+
+	count = 0.
+
+	# h_sign = TH1D("h_sign","",50,0,5)
+
+	# Loop over MC cycles
+	for i in range(0,n_MC):
+		Mean_bgd = rand.Gaus(mean_bgd,Delta_bgd)
+		N_bgd = rand.Poisson(mean_bgd)
+		N_sig = rand.Poisson(mean_sig)
+
+		# Calculate p-values
+		pvalue = IntegratePoissonFromRight(N_bgd,N_bgd+N_sig)
+		if(pvalue<=0 or pvalue>=1.): continue
+
+		significance = ROOT.Math.gaussian_quantile_c(pvalue,1)
+		sign += significance
+		# print(sign,"	",pvalue)
+		# h_sign.Fill(significance)
+		count += 1.
+
+	sign /= count
+
+	# cvs = TCanvas("cvs","Standard Canvas",600,400)
+	# cvs.cd()
+	# h_sign.Draw()
+	# cvs.Print("Plots/Significante_toy.pdf")
+
+
+	print("Expected significance after rescaling:	",sign)
 	
-	return
+	return sign
 
 # -------------------------------------------------
 
@@ -675,7 +771,7 @@ def PoissonError(nObs, ErrorType, plot=""):
 			Area = h_likelihood.Integral( LeftIndex,RightIndex )
 
 		Lambda_1sigma_low = h_likelihood.GetBinCenter(LeftIndex)
-		Lambda_1sigma_up = h_likelihood.GetBinCenter(RightIndex)
+		Lambda_1sigma_up = h_likelihood.GettingBinCenter(RightIndex)
 
 	return [Lambda_1sigma_low, Lambda_1sigma_up]
 
