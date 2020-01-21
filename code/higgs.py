@@ -1,5 +1,7 @@
 
 import numpy as np
+import multiprocessing as mp
+import time
 import ROOT
 import ctypes
 from ROOT import TBox, TArrow, TCanvas, TH1D, TH2D, TLine, TMath, TRandom3, TROOT, TLatex, TFile, TLegend, TLegendEntry, gROOT, gDirectory, kTRUE, kFALSE, TMarker
@@ -24,7 +26,7 @@ def GetMassDistribution( Itype=1, scalefactor=1.00 ):
 
 	# scale histograms
 	Nbins = h_mass.GetNbinsX()
-	for i in range(0,Nbins):
+	for i in range(1,Nbins+1):
 		mu_bin = h_mass.GetBinContent(i)
 		h_mass.SetBinContent(i, scalefactor*mu_bin)
 
@@ -167,8 +169,6 @@ def MassPlot(Irebin):
 	leg1.Draw()
 
 	c2.Print("Plots/Sideband_region.pdf")
-
-
 
 	return
 
@@ -390,7 +390,7 @@ def SideBandFit(irebin=1):
 
 # ---------------------------------------------------------
 
-<<<<<<< HEAD
+
 def ExpectedSignificance_ToyMC(n_MC,lumi=1.,profile='n'):
 	masswindow = 7.15
 	signal = GetMassDistribution(125,lumi)
@@ -415,8 +415,6 @@ def ExpectedSignificance_ToyMC(n_MC,lumi=1.,profile='n'):
 
 	count = 0.
 
-	# h_sign = TH1D("h_sign","",50,0,5)
-
 	# Loop over MC cycles
 	for i in range(0,n_MC):
 		Mean_bgd = rand.Gaus(mean_bgd,Delta_bgd)
@@ -435,14 +433,10 @@ def ExpectedSignificance_ToyMC(n_MC,lumi=1.,profile='n'):
 
 	sign /= count
 
-	# cvs = TCanvas("cvs","Standard Canvas",600,400)
-	# cvs.cd()
-	# h_sign.Draw()
-	# cvs.Print("Plots/Significante_toy.pdf")
-
-
 	print("Expected significance after rescaling:	",sign)
-=======
+
+
+
 def ExpectedSignificance_ToyMC(mean_bgd, Delta_bgd, mean_sig, n_MC):
 	gROOT.Clear()
 	gROOT.Delete()
@@ -466,9 +460,8 @@ def ExpectedSignificance_ToyMC(mean_bgd, Delta_bgd, mean_sig, n_MC):
 	#print(pvalue,"	",significance)
 
 	print('Expected significance after rescaling:	',significance)
->>>>>>> d9917d8b1e4da915546f1c360a93a5a489f084e8
 	
-	return sign
+	return significance
 
 # -------------------------------------------------
 
@@ -543,26 +536,60 @@ def Quantiles(hist):
 	return Xvalues_out
 
 
-
-def TestStatisticsDistribution( N_MC ):
+def FillTestHistogram(templ,N_MC,signal=1.0):
 	h_bgr = GetMassDistribution(1)
 	h_sig = GetMassDistribution(125)
-	h_data = GetMassDistribution(2)
 
-	h_test_bgr = TH1D("test_bgr","",200,-30.,30.)
-	h_test_sb = TH1D("test_sb","",200,-30.,30.)
+	print(signal)
 
-	rand = TRandom3()
-
+	h_test = TH1D("test_"+templ,"",200,-30.,30.)
 	for i in range(1,N_MC+1):
-		h_toy_bgr = ToyDataSet("bgr")
-		h_toy_sb = ToyDataSet("sb")
+		h_toy = ToyDataSet(templ)
 
-		h_test_bgr.Fill( GetTestStatistics(h_toy_bgr,h_bgr,h_sig) )
-		h_test_sb.Fill( GetTestStatistics(h_toy_sb,h_bgr,h_sig) )
+		h_test.Fill( GetTestStatistics(h_toy, h_bgr, h_sig) )
 
-		if i%100==0: print("step ",i," of ",N_MC )
-			
+		if i%1000==0: print("step ",i," of ",N_MC )
+
+	return h_test
+
+
+
+
+def TestStatisticsDistribution( N_MC, signal=1.0 ):
+
+	pool = mp.Pool(mp.cpu_count())
+
+	templ = ["bgr","sb"]
+
+	[h_test_bgr, h_test_sb] = [pool.apply( FillTestHistogram, args=(i, N_MC, signal) ) for i in  templ]
+
+	pool.close()
+
+	# saving MC dataset
+	dir = gDirectory
+	dir.cd()
+	myfile = TFile("toy_"+str(signal)+".root","RECREATE")
+	h_test_bgr.Write()
+	h_test_sb.Write()
+	myfile.Close()
+
+	return			
+
+def Pvalues(signal=1.0):
+
+	h_data = GetMassDistribution(2)
+	h_bgr = GetMassDistribution(1)
+	h_sig = GetMassDistribution(125)
+
+
+	dir = ROOT.gDirectory
+	file = ROOT.TFile("toy_"+str(signal)+".root","READ")
+	dir.cd()
+
+	h_test_bgr = file.Get("test_bgr").Clone("h_test_bgr")
+	h_test_sb = file.Get("test_sb").Clone("h_test_sb")
+
+
 
 	TestStat_data = GetTestStatistics(h_data,h_bgr,h_sig)
 	print("--------------------")
@@ -607,24 +634,41 @@ def TestStatisticsDistribution( N_MC ):
 
 	print("\ns+b hypothesis")
 	print("-----------------------------------------")
-	print("	CL_sb 		pvalue 		significance 	")
-	print("bgr:	",CLsb_bgr,"	",1-CLsb_bgr,"	",ROOT.Math.gaussian_quantile_c(1-CLsb_bgr,1))
-	print("S+B:	",CLb_sb,"	",1-CLb_sb,"	",ROOT.Math.gaussian_quantile_c(1-CLsb_sb,1))
-	print("Data:	",CLsb_data,"	",1-CLsb_data,"	",ROOT.Math.gaussian_quantile_c(1-CLsb_data,1))
+	print("	CL_sb 		pvalue 		CL_s 	")
+	print("bgr:	",CLsb_bgr,"	",1-CLsb_bgr,"	",CLsb_bgr/CLb_bgr )
+	print("S+B:	",CLsb_sb,"	",1-CLsb_sb,"	",CLsb_sb/CLb_sb )
+	print("Data:	",CLsb_data,"	",1-CLsb_data,"	",CLsb_data/CLb_data )
 	print("-----------------------------------------")
 
-	cvs = TCanvas("cvs","Standard Canvas",600,400)
-	Data_max = h_test_bgr.GetBinContent(h_test_bgr.GetMaximumBin())
-	Ymax_plot = Data_max + np.sqrt(Data_max)
-	h_test_bgr.SetAxisRange(0.,Ymax_plot,"Y")
-	line = TLine(TestStat_data,0,TestStat_data,Ymax_plot)
+	if signal!=1.: 
+		cvs = TCanvas("cvs","Standard Canvas",600,400)
+		Data_max = h_test_bgr.GetBinContent(h_test_bgr.GetMaximumBin())
+		Ymax_plot = Data_max + np.sqrt(Data_max)
+		h_test_bgr.SetAxisRange(0.,Ymax_plot,"Y")
+		line = TLine(TestStat_data,0,TestStat_data,Ymax_plot)
 
-	cvs.cd()
+		cvs.cd()
+		h_test_bgr.SetTitle("TEST STATISTIC DISTRIBUTION")
+		h_test_bgr.SetLineColor(9)
+		h_test_sb.SetLineColor(8)
+		line.SetLineColor(2)
+		h_test_bgr.GetXaxis().SetTitle("test statistic values")
+		h_test_bgr.GetYaxis().SetTitle("# toy experiments")
+		h_test_bgr.SetStats(kFALSE)
 
-	h_test_bgr.Draw("L")
-	h_test_sb.Draw("same L")
-	line.Draw("same")
-	cvs.Print("Plots/TestStat.pdf")
+		h_test_bgr.Draw("L")
+		h_test_sb.Draw("same L")
+		line.Draw("same")
+		leg1 = TLegend(0.70,0.70,0.90,0.85)
+		leg1.SetBorderSize(1); leg1.SetFillColor(0);
+		leg1a = leg1.AddEntry(h_test_bgr, "b- only", "l"); leg1a.SetTextSize(0.04);
+		leg1b = leg1.AddEntry(h_test_sb, "s+b", "l"); leg1b.SetTextSize(0.04);
+		leg1.Draw()
+		cvs.Print("Plots/TestStat"+str(signal)+".pdf")
+
+	file.Close()
+
+	return CLsb_data, CLsb_data/CLb_data
 
 # -------------------------------------------------------
 
@@ -658,7 +702,7 @@ def MuFit(Nbins,irebin=1.):
 
 				if (MeanBin>0): loglik += TMath.Log( TMath.Poisson(NObsBin,MeanBin) )
 				
-				#print("Alpha = ",sf_bgr,"	Mu = ",sf_sig,"	likelihood = ",loglik)
+				if(sf_bgr%1.==0): print("Alpha = ",sf_bgr,"	Mu = ",sf_sig,"	likelihood = ",loglik)
 
 			h_sf.SetBinContent(i,j,-2.*loglik)
 
@@ -684,8 +728,16 @@ def MuFit(Nbins,irebin=1.):
 	canvas.cd()
 	Min = TMarker(best_alpha,best_mu,29)
 	Min.SetMarkerSize(2)
+	h_sf.SetStats(kFALSE)
+	h_sf.SetTitle("HIGGS PRODUCTION CROSS SECTION - PARAMETERS")
+	h_sf.GetXaxis().SetTitle(r"#alpha")
+	h_sf.GetYaxis().SetTitle(r"#mu")
 	h_sf.Draw("COLZ")
 	Min.Draw()
+	leg1 = TLegend(0.65,0.85,0.85,0.75)
+	leg1.SetBorderSize(1); leg1.SetFillColor(0);
+	leg1a = leg1.AddEntry(Min, r"optimal (#alpha,#mu)", "p"); leg1a.SetTextSize(0.04);
+	leg1.Draw()
 	canvas.Print("Plots/MuFit.pdf")
 
 

@@ -1,4 +1,5 @@
 import higgs
+import ROOT
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -54,25 +55,38 @@ def IncreaseLumi(method="",npoints=50):
 # plt.savefig("Plots/Significance_lumi_scale.pdf")
 # plt.show()
 
-<<<<<<< HEAD
-=======
+
 # higgs.SideBandFit(10)
 
-higgs.ExpectedSignificance_ToyMC(7.10,0.41,5.96,1000000)
->>>>>>> d9917d8b1e4da915546f1c360a93a5a489f084e8
+# higgs.ExpectedSignificance_ToyMC(7.10,0.41,5.96,1000000)
 
-h_data = higgs.GetMassDistribution(2)
-h_sig = higgs.GetMassDistribution(125)
-h_bgd = higgs.GetMassDistribution(1)
 
-print("TestStatistics = ",higgs.GetTestStatistics(h_data, h_bgd, h_sig))
+# h_data = higgs.GetMassDistribution(2)
+# h_sig = higgs.GetMassDistribution(125)
+# h_bgd = higgs.GetMassDistribution(1)
 
-higgs.TestStatisticsDistribution( 10000 )
+# print("TestStatistics = ",higgs.GetTestStatistics(h_data, h_bgd, h_sig))
+
+# higgs.TestStatisticsDistribution( 100000 )
+
+# higgs.Pvalues()
+
+n_points = 2
+
+signal_scale = np.linspace(2.50, 5.75, n_points)
+CLsb = np.zeros(n_points)
+CLs = np.zeros(n_points)
+for i in range(n_points):
+	print("Generating dataset with signal scalefactor ",signal_scale[i])
+	higgs.TestStatisticsDistribution(1000,signal_scale[i])
+	CLsb[i], CLs[i] = higgs.Pvalues(signal_scale[i])
+
+plt.plot(signal_scale,CLsb,'x',linestyle='none')
+plt.show()
 
 # higgs.MuFit(500,10)
 
-<<<<<<< HEAD
+
 # print(higgs.PoissonError(3,"Bayes HDI"))
-=======
+
 # print(higgs.PoissonError(3,"Bayes HDI"))
->>>>>>> d9917d8b1e4da915546f1c360a93a5a489f084e8
