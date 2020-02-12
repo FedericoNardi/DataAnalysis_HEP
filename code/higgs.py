@@ -4,14 +4,14 @@ import multiprocessing as mp
 import time
 import ROOT
 import ctypes
-from ROOT import TBox, TArrow, TCanvas, TH1D, TH2D, TLine, TMath, TRandom3, TROOT, TLatex, TFile, TLegend, TLegendEntry, gROOT, gDirectory, kTRUE, kFALSE, TMarker
+from ROOT import gStyle, kRed, TGraph, TMultiGraph, TPad, TBox, TArrow, TCanvas, TH1D, TH2D, TLine, TMath, TRandom3, TROOT, TLatex, TFile, TLegend, TLegendEntry, gROOT, gDirectory, kTRUE, kFALSE, TMarker
 
 
 # ------- FUNCTIONS ---------
 
 def GetMassDistribution( Itype=1, scalefactor=1.00 ):
 	dir = gDirectory
-	file = TFile("Histograms_fake.root","READ")
+	file = TFile("Data/Histograms_fake.root","READ")
 	dir.cd()
 
 	if(Itype==125):
@@ -178,6 +178,12 @@ def IntegratePoissonFromRight(mu, Nobs):
 	integral = 1.
 	for i in range(0,int(Nobs)):
 		integral -= TMath.Poisson(i, mu)
+	return integral
+
+def IntegratePoisson(mu, Nobs):
+	integral = 0.
+	for i in range(0,int(Nobs)):
+		integral += TMath.Poisson(i, mu)
 	return integral
 
 # --------------------------------------------------------------------------
@@ -682,7 +688,7 @@ def MuFit(Nbins,irebin=1.):
 	h_data.Rebin(irebin)
 	h_sig.Rebin(irebin)
 
-	h_sf = TH2D("scalefactor","title",Nbins,0.5,2.5,Nbins,0.,6.)
+	h_sf = TH2D("scalefactor","title",Nbins,0.5,2.,Nbins,0.,5.)
 
 	for i in range(1,h_sf.GetNbinsX()+1):
 		for j in range(1,h_sf.GetNbinsY()+1):
@@ -701,8 +707,6 @@ def MuFit(Nbins,irebin=1.):
 				MeanBin = sf_bgr*h_bgr.GetBinContent(iDataBin) + sf_sig*h_sig.GetBinContent(iDataBin)
 
 				if (MeanBin>0): loglik += TMath.Log( TMath.Poisson(NObsBin,MeanBin) )
-				
-				if(sf_bgr%1.==0): print("Alpha = ",sf_bgr,"	Mu = ",sf_sig,"	likelihood = ",loglik)
 
 			h_sf.SetBinContent(i,j,-2.*loglik)
 
@@ -733,6 +737,16 @@ def MuFit(Nbins,irebin=1.):
 	h_sf.GetXaxis().SetTitle(r"#alpha")
 	h_sf.GetYaxis().SetTitle(r"#mu")
 	h_sf.Draw("COLZ")
+
+	h_sigma = h_sf.Clone("h_sigma")
+	h_sigma.Reset()
+	for i in range(1,h_sigma.GetNbinsX()+1):
+		for j in range(1,h_sigma.GetNbinsY()+1):
+			if( h_sf.GetBinContent(i,j)<=1.): h_sigma.SetBinContent(i,j, 1.)
+	h_sigma.SetMarkerColorAlpha(kRed,0.40)
+
+	h_sigma.SetMarkerSize(10)
+	h_sigma.Draw("same L")
 	Min.Draw()
 	leg1 = TLegend(0.65,0.85,0.85,0.75)
 	leg1.SetBorderSize(1); leg1.SetFillColor(0);
@@ -744,76 +758,173 @@ def MuFit(Nbins,irebin=1.):
 # ------------------------------------
 
 def PoissonError(nObs, ErrorType, plot=""):
-	if plot=="plot": 
-		canvas1 = TCanvas("canvas1","Standard Canvas",600,400)
-		canvas1.SetLeftMargin(0.125)
-		canvas1.SetBottomMargin(0.125)
 
 	# Prepare histograms
 	LambdaMin = 0.
 	LambdaMax = nObs + 6*np.sqrt(nObs)
-	Nsteps = 10000
-	h_likelihood = TH1D( "h_likelihood","lambda likelihood",Nsteps,LambdaMin,LambdaMax)
-	h_2loglik = TH1D("h_2loglik","lambda likelihood",Nsteps,LambdaMin,LambdaMax)
-	h_pdf_full = TH1D("h_pdf_full","PDF for lambda 		",Nsteps,LambdaMin,LambdaMax)
+	Nsteps = 1000
 
-	# Standard parameters
-	Integral_fraction_1sigma = ROOT.Math.gaussian_cdf(-1,1,0)
+	h_likelihood = TH1D( "h_likelihood","",Nsteps,LambdaMin,LambdaMax )
+	h_2loglik = TH1D( "h_2loglik","",Nsteps,LambdaMin,LambdaMax )
+	h_pdf_full = TH1D( "h_pdf_full","",Nsteps,LambdaMin,LambdaMax )
 
-	# Loop over hypotheses of mean of the 'true' Poisson (lambda)
-	for iBin in range(1,Nsteps+1):
-		Lambda = h_likelihood.GetBinCenter(iBin)
-		# if np.abs(Lambda)<1e-9: Lambda = 1e-9
+	IntFraction =ROOT.Math.gaussian_cdf(-1,1,0)
 
-		# Compute Poisson probability
+	# loop over possible Lambda values
+	for iBin in  range(1,Nsteps+1):
+		Lambda=h_likelihood.GetBinCenter(iBin)
+
 		PoissonProb = TMath.Poisson(nObs,Lambda)
-		LogLikelihood = -2.*TMath.Log( PoissonProb )
+		LogLikelihood = -2.*TMath.Log(PoissonProb)
 
-		# Fill histogram for Likelihood and PDF
-		h_likelihood.Fill(Lambda, PoissonProb)
-		h_2loglik.Fill(Lambda, LogLikelihood)
-		h_pdf_full.Fill(Lambda, PoissonProb*1)
+		h_likelihood.Fill( Lambda,PoissonProb )
+		h_2loglik.Fill( Lambda, LogLikelihood )
+		h_pdf_full.Fill( Lambda, PoissonProb*1. )
 
-	# Get characteristic values
+	# get characteristic values
 	bin_central = h_2loglik.GetMinimumBin()
 	LoglikMin = h_2loglik.GetBinContent(bin_central)
 	Lambda_central = h_2loglik.GetBinCenter(bin_central)
 
-	# Compute error region
+	LambdaLow = -1.
+	LambdaUp = -1.
 
-	Lambda_1sigma_low = -1.
-	Lambda_1sigma_up = -1.
 
-	# FREQUENTIST 
-	if ErrorType=="Classical Central":
+	if ErrorType=="ClassicalCentral": # Frequentist
 		NobsMax = nObs+100
 
-		for ibin in range(h_pdf_full.GetNbinsX()+1): # loop over lambda
-			Lambda = h_pdf_full.GetBinCenter(ibin)
-			PoissonSum_low = 0.
-			PoissonSum_up = 0.
+		for iBin in range(1,h_pdf_full.GetNbinsX()+1):
+			Lambda = h_pdf_full.GetBinCenter(iBin)
+			PoissonSumLow = 0.
+			PoissonSumUp = 0.
 
-			# lower value
 			for i in range(nObs,NobsMax+1):
-				PoissonSum_low += TMath.Poisson(i, Lambda)
+				PoissonSumLow += TMath.Poisson(i,Lambda)
+			
+			if( PoissonSumLow>IntFraction and LambdaLow<0 ):
+				LambdaLow = Lambda
 
-			if (PoissonSum_low>Integral_fraction_1sigma and Lambda_1sigma_low<0.):
-				Lambda_1sigma_low = Lambda
-
-			# upper value
 			for i in range(0,nObs+1):
-				PoissonSum_up += TMath.Poisson(i,Lambda)
+				PoissonSumUp += TMath.Poisson(i,Lambda)
 
-			if (PoissonSum_up<Integral_fraction_1sigma and Lambda_1sigma_up < 0.):
-				Lambda_1sigma_up = Lambda
+			if( PoissonSumUp<IntFraction and LambdaUp<0 ):
+				LambdaUp = Lambda
 
-	if ErrorType=="Likelihood Ratio":
+		cvs = TCanvas("Standard Canvas","",600,600)
+
+	
+		cvs.Divide(1,2)
+
+		cvs.cd(1)
+
+		hLow = TH1D("hLow","CLASSICAL CENTRAL",1000,0,17)
+		for i in range(1,hLow.GetNbinsX()+1):
+			hLow.SetBinContent(i, TMath.Poisson( hLow.GetBinCenter(i),LambdaLow ))
+		hLow.SetLineColor(1)
+		hLow.GetXaxis().SetTitle(r"#mu")
+
+		h_conf = hLow.Clone("h_conf")
+		for i in range(1,h_conf.GetNbinsX()+1):
+			if(h_conf.GetBinCenter(i)<=nObs): h_conf.SetBinContent(i, 0)
+		h_conf.SetFillColorAlpha(9,0.5)
+		h_conf.SetLineWidth(1)
+		h_conf.SetLineColor(1)
+
+
+		LowLine = TLine(LambdaLow,0,LambdaLow,hLow.GetBinContent(hLow.FindBin(LambdaLow)))
+
+		hLow.SetStats(kFALSE)
+
+
+		hLow.Draw("l")
+		h_conf.Draw("l same")
+		LowLine.Draw()
+
+		text = TLatex()
+		text.SetTextSize(0.5)
+		text.SetTextColor(1)
+		text.DrawLatex(0.5,0.8, "LOL")
+
+		cvs.cd(2)
+
+		hUp = TH1D("hUp","",1000,0,17)
+		for i in range(1,hUp.GetNbinsX()+1):
+			hUp.SetBinContent(i, TMath.Poisson( hLow.GetBinCenter(i),LambdaUp ))
+		hUp.SetLineColor(1)
+		hUp.GetXaxis().SetTitle(r"#mu")
+
+		h_conf1 = hUp.Clone("h_conf")
+		for i in range(1,h_conf.GetNbinsX()+1):
+			if(h_conf.GetBinCenter(i)>=nObs): h_conf1.SetBinContent(i, 0)
+		h_conf1.SetFillColorAlpha(9,0.5)
+		h_conf1.SetLineWidth(1)
+		h_conf1.SetLineColor(1)
+
+		UpLine = TLine(LambdaUp,0,LambdaUp,hUp.GetBinContent(hUp.FindBin(LambdaUp)))
+
+		hUp.SetStats(kFALSE)
+
+
+		hUp.Draw("l")
+		h_conf1.Draw("l same")
+		UpLine.Draw()
+
+		cvs.cd()
+
+		leg1 = TLegend(0.35,0.70,0.90,0.85)
+		leg1.SetBorderSize(1); leg1.SetFillColor(0);
+		h_conf.SetMarkerColor(0)
+		leg1a = leg1.AddEntry(h_conf, r"(#mu_{low}, #mu_{up}) = ("+str(round(LambdaLow,2))+","+str(round(LambdaUp,2))+")","p"); leg1a.SetTextSize(0.04);
+		leg1.Draw()
+
+		cvs.Print("Plots/Errors_"+ErrorType+".eps")
+
+
+
+	if ErrorType=="LikelihoodRatio":
 		for i in range(1,h_2loglik.GetNbinsX()+1):
-			if (h_2loglik.GetBinCenter(i)<LoglikMin and h_2loglik.GetBinContent(i)-LoglikMin>=1.):  Lambda_1sigma_low=h_2loglik.GetBinCenter(i)
-			if (h_2loglik.GetBinCenter(i)>LoglikMin and h_2loglik.GetBinContent(i)-LoglikMin<=1.):  Lambda_1sigma_up=h_2loglik.GetBinCenter(i)
+			if (h_2loglik.GetBinCenter(i)<LoglikMin and h_2loglik.GetBinContent(i)-LoglikMin>=1.):  LambdaLow=h_2loglik.GetBinCenter(i)
+			if (h_2loglik.GetBinCenter(i)>LoglikMin and h_2loglik.GetBinContent(i)-LoglikMin<=1.):  LambdaUp=h_2loglik.GetBinCenter(i)
+
+		cvs = TCanvas("Standard Canvas","",600,400)
+		cvs.cd()
+
+		LowLine = TLine(LambdaLow,2,LambdaLow,h_2loglik.GetBinContent(h_2loglik.FindBin(LambdaLow))); LowLine.SetLineWidth(1)
+		UpLine = TLine(LambdaUp,2,LambdaUp,h_2loglik.GetBinContent(h_2loglik.FindBin(LambdaUp))); UpLine.SetLineWidth(1)
+		ObsLine = TLine(nObs,2,nObs,h_2loglik.GetBinContent(h_2loglik.FindBin(nObs))); ObsLine.SetLineWidth(1); ObsLine.SetLineColor(2); ObsLine.SetLineStyle(7)
+
+		h_2loglik.SetFillColor(0)
+		h_2loglik.SetStats(kFALSE)
+		h_2loglik.SetTitle("LIKELIHOOD RATIO")
+		h_2loglik.SetAxisRange(0.8,8,"X")
+		h_2loglik.SetAxisRange(2,7,"Y")
+		h_2loglik.Draw("hist lp")
+		h_2loglik.GetXaxis().SetTitle(r"#mu")
+
+		h_conf = h_2loglik.Clone("h_conf")
+		for i in range(1,h_conf.GetNbinsX()+1):
+			if(h_conf.GetBinCenter(i)>LambdaLow and h_conf.GetBinCenter(i)<LambdaUp): h_conf.SetBinContent(i,0)
+
+		h_conf.SetFillColor(9)
+		h_conf.Draw("hist same")
+
+		leg1 = TLegend(0.55,0.70,0.90,0.85)
+		leg1.SetBorderSize(1); leg1.SetFillColor(0);
+		h_conf.SetMarkerColor(0)
+		leg1a = leg1.AddEntry(h_conf, r"(#mu_{low}, #mu_{up}) = ("+str(round(LambdaLow,2))+","+str(round(LambdaUp,2))+")","p"); leg1a.SetTextSize(0.04);
+		leg1.Draw()
+
+		LowLine.Draw()
+		UpLine.Draw()
+		ObsLine.Draw()
+		
+
+		cvs.Print("Plots/Errors_"+ErrorType+".eps")
 
 
-	if ErrorType=="Bayes Central": 
+
+
+	if ErrorType=="BayesCentral": 
 		# Work on likelihood as PDF
 		Integral = h_likelihood.Integral()
 		for i in range(1,h_likelihood.GetNbinsX()+1):
@@ -823,16 +934,52 @@ def PoissonError(nObs, ErrorType, plot=""):
 		Sum_low = 0.
 		Sum_up = 0.
 		for i in range(1,bin_central+1):
-			if Sum_low<=Integral_fraction_1sigma:
+			if Sum_low<=IntFraction:
 				Sum_low += h_likelihood.GetBinContent(i)
-				Lambda_1sigma_low = h_likelihood.GetBinCenter(i)
+				LambdaLow = h_likelihood.GetBinCenter(i)
 		for i in range(h_likelihood.GetNbinsX(),bin_central,-1):
-			if Sum_up<=Integral_fraction_1sigma:
+			if Sum_up<=IntFraction:
 				Sum_up += h_likelihood.GetBinContent(i)
-				Lambda_1sigma_up = h_likelihood.GetBinCenter(i)
+				LambdaUp = h_likelihood.GetBinCenter(i)
+
+		cvs = TCanvas("Standard Canvas","",600,400)
+		cvs.cd()
+
+		LowLine = TLine(LambdaLow,0,LambdaLow,h_likelihood.GetBinContent(h_likelihood.FindBin(LambdaLow))); LowLine.SetLineWidth(1)
+		UpLine = TLine(LambdaUp,0,LambdaUp,h_likelihood.GetBinContent(h_likelihood.FindBin(LambdaUp))); UpLine.SetLineWidth(1)
+		ObsLine = TLine(nObs,0,nObs,h_likelihood.GetBinContent(h_2loglik.FindBin(nObs))); ObsLine.SetLineWidth(1); ObsLine.SetLineColor(2); ObsLine.SetLineStyle(7)
 
 
-	if ErrorType=="Bayes HDI":
+		h_likelihood.SetFillColor(0)
+		h_likelihood.SetStats(kFALSE)
+		h_likelihood.SetTitle("BAYES CENTRAL")
+		#h_likelihood.SetAxisRange(0.8,8,"X")
+		#h_likelihood.SetAxisRange(2,7,"Y")
+		h_likelihood.Draw("hist lp")
+		h_likelihood.GetXaxis().SetTitle(r"#mu")
+
+		h_conf = h_likelihood.Clone("h_conf")
+		for i in range(1,h_conf.GetNbinsX()+1):
+			if(h_conf.GetBinCenter(i)>LambdaLow and h_conf.GetBinCenter(i)<LambdaUp): h_conf.SetBinContent(i,0)
+
+		h_conf.SetFillColor(9)
+		h_conf.Draw("hist same")
+
+		leg1 = TLegend(0.55,0.70,0.90,0.85)
+		leg1.SetBorderSize(1); leg1.SetFillColor(0);
+		h_conf.SetMarkerColor(0)
+		leg1a = leg1.AddEntry(h_conf, r"(#mu_{low}, #mu_{up}) = ("+str(round(LambdaLow,2))+","+str(round(LambdaUp,2))+")","p"); leg1a.SetTextSize(0.04);
+		leg1.Draw()
+
+		LowLine.Draw()
+		UpLine.Draw()
+		ObsLine.Draw()
+		
+
+		cvs.Print("Plots/Errors_"+ErrorType+".eps")
+
+
+	if ErrorType=="BayesHDI":
 		# Work on likelihood as PDF
 		Integral = h_likelihood.Integral()
 		for i in range(1,h_likelihood.GetNbinsX()+1):
@@ -840,7 +987,7 @@ def PoissonError(nObs, ErrorType, plot=""):
 
 		Area = 0.	
 		RightIndex=bin_central
-		while Area<=(1-2*Integral_fraction_1sigma):
+		while Area<=(1-2*IntFraction):
 			RightIndex+=1
 			# find corresponding bin on left side
 			for i in range(1,bin_central):
@@ -848,22 +995,54 @@ def PoissonError(nObs, ErrorType, plot=""):
 					LeftIndex=i
 			Area = h_likelihood.Integral( LeftIndex,RightIndex )
 
-		Lambda_1sigma_low = h_likelihood.GetBinCenter(LeftIndex)
-		Lambda_1sigma_up = h_likelihood.GettingBinCenter(RightIndex)
+		LambdaLow = h_likelihood.GetBinCenter(LeftIndex)
+		LambdaUp = h_likelihood.GetBinCenter(RightIndex)
 
-	return [Lambda_1sigma_low, Lambda_1sigma_up]
+		cvs = TCanvas("Standard Canvas","",600,400)
+		cvs.cd()
+
+		LowLine = TLine(LambdaLow,0,LambdaLow,h_likelihood.GetBinContent(h_likelihood.FindBin(LambdaLow))); LowLine.SetLineWidth(1)
+		UpLine = TLine(LambdaUp,0,LambdaUp,h_likelihood.GetBinContent(h_likelihood.FindBin(LambdaUp))); UpLine.SetLineWidth(1)
+		ObsLine = TLine(nObs,0,nObs,h_likelihood.GetBinContent(h_2loglik.FindBin(nObs))); ObsLine.SetLineWidth(1); ObsLine.SetLineColor(2); ObsLine.SetLineStyle(7)
+
+		h_likelihood.SetFillColor(0)
+		h_likelihood.SetStats(kFALSE)
+		h_likelihood.SetTitle("BAYES SHORTEST")
+		h_likelihood.Draw("hist lp")
+		h_likelihood.GetXaxis().SetTitle(r"#mu")
+
+		h_conf = h_likelihood.Clone("h_conf")
+		for i in range(1,h_conf.GetNbinsX()+1):
+			if(h_conf.GetBinCenter(i)>LambdaLow and h_conf.GetBinCenter(i)<LambdaUp): h_conf.SetBinContent(i,0)
+
+		h_conf.SetFillColor(9)
+		h_conf.Draw("hist same")
+
+		leg1 = TLegend(0.55,0.70,0.90,0.85)
+		leg1.SetBorderSize(1); leg1.SetFillColor(0);
+		h_conf.SetMarkerColor(0)
+		leg1a = leg1.AddEntry(h_conf, r"(#mu_{low}, #mu_{up}) = ("+str(round(LambdaLow,2))+","+str(round(LambdaUp,2))+")","p"); leg1a.SetTextSize(0.04);
+		leg1.Draw()
+
+		LowLine.Draw()
+		UpLine.Draw()
+		ObsLine.Draw()
+		
+
+		cvs.Print("Plots/Errors_"+ErrorType+".eps")
+
+
+	return [LambdaLow, LambdaUp]
 
 
 
 
 
-#	if plot=="plot":
-#		NobsMax = nObs+25
 
-#		h1 = TH1D("h1", "poisson probability (sec)	",NobsMax+1,-0.5,NobsMax+0.5)
-#		h_up = TH1D("h_up", "poisson probability (n >=nobs)", NobsMax+1,-0.5,NobsMax+0.5)
-#		h_low = TH1D("h_low", "poisson probability (n >=nobs)", NobsMax+1,-0.5,NobsMax)
 
+
+
+	return
 
 
 

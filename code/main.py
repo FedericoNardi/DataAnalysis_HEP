@@ -71,22 +71,23 @@ def IncreaseLumi(method="",npoints=50):
 
 # higgs.Pvalues()
 
-n_points = 2
+# n_points = 2
 
-signal_scale = np.linspace(2.50, 5.75, n_points)
-CLsb = np.zeros(n_points)
-CLs = np.zeros(n_points)
-for i in range(n_points):
-	print("Generating dataset with signal scalefactor ",signal_scale[i])
-	higgs.TestStatisticsDistribution(1000,signal_scale[i])
-	CLsb[i], CLs[i] = higgs.Pvalues(signal_scale[i])
+# signal_scale = np.linspace(2.50, 5.75, n_points)
+# CLsb = np.zeros(n_points)
+# CLs = np.zeros(n_points)
+# for i in range(n_points):
+# 	print("Generating dataset with signal scalefactor ",signal_scale[i])
+# 	higgs.TestStatisticsDistribution(1000,signal_scale[i])
+# 	CLsb[i], CLs[i] = higgs.Pvalues(signal_scale[i])
 
-plt.plot(signal_scale,CLsb,'x',linestyle='none')
-plt.show()
+# plt.plot(signal_scale,CLsb,'x',linestyle='none')
+# plt.show()
 
 # higgs.MuFit(500,10)
 
+print(higgs.PoissonError(3,"ClassicalCentral",plot="plot"))
+print(higgs.PoissonError(3,"LikelihoodRatio",plot="plot"))
+print(higgs.PoissonError(3,"BayesCentral",plot="plot"))
+print(higgs.PoissonError(3,"BayesHDI",plot="plot"))
 
-# print(higgs.PoissonError(3,"Bayes HDI"))
-
-# print(higgs.PoissonError(3,"Bayes HDI"))
